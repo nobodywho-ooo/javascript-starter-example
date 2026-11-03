@@ -103,6 +103,11 @@ export class Engine {
   private yieldBetweenTokens: boolean;
   /** True while a generation task is using the model context. */
   private generating = false;
+  /** Options of the most recent load, so ask() can re-load after an unload
+   * or failed load instead of dropping the message. */
+  private lastLoadOptions: LoadOptions | null = null;
+  /** Dedupes concurrent identical load calls (e.g. a prefetch race). */
+  private activeLoad: { key: string; promise: Promise<void> } | null = null;
   /** Set by stop(); checked in the token loop so tokens already buffered in
    * the Rust channel are dropped instead of streamed out after a stop. */
   private stopRequested = false;
@@ -202,6 +207,19 @@ export class Engine {
    * If the model isn't cached, this will download it first.
    */
   async load(opts: LoadOptions): Promise<void> {
+    this.lastLoadOptions = opts;
+    // Same settings already loading? Piggyback on the in-flight load instead
+    // of starting a second one (which would leak the first model).
+    const key = JSON.stringify(opts);
+    if (this.activeLoad?.key === key) return this.activeLoad.promise;
+    const promise = this.doLoad(opts).finally(() => {
+      if (this.activeLoad?.promise === promise) this.activeLoad = null;
+    });
+    this.activeLoad = { key, promise };
+    return promise;
+  }
+
+  private async doLoad(opts: LoadOptions): Promise<void> {
     this.events.onStatus("loading");
     let reportedDownload = false;
     try {
@@ -260,6 +278,13 @@ export class Engine {
   }
 
   async ask(text: string): Promise<void> {
+    // A message can arrive with no model loaded — e.g. a queued message
+    // flushed after an unload won a race with the load meant for it.
+    // Reload the last-used configuration so the message isn't lost.
+    if (!this.chat && this.lastLoadOptions) {
+      this.events.onLog("No model loaded — loading before answering.", "info");
+      await this.load(this.lastLoadOptions);
+    }
     if (!this.chat) {
       this.events.onLog("No model loaded — load a model before asking.", "warn");
       return;

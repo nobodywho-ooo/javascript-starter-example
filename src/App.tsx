@@ -504,35 +504,60 @@ export default function App() {
     });
   };
 
+  /** Append the user message and queue it to flush once the model is
+   * ready. Shared by the auto-load and load-in-flight paths. */
+  const queueUserMessage = (text: string) => {
+    pendingAskRef.current = { text, conversationId: active.id };
+    setInput("");
+    updateConversation(active.id, {
+      title:
+        active.messages.length === 0
+          ? text.length > 40
+            ? `${text.slice(0, 40)}…`
+            : text
+          : active.title,
+      messages: [
+        ...active.messages.map((m) =>
+          m.id === "streaming" ? { ...m, id: crypto.randomUUID() } : m,
+        ),
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: text,
+          timestamp: Date.now(),
+        },
+      ] as StoredMessage[],
+    });
+  };
+
+  /** Start loading the model (no-op if it's already loaded or loading), so
+   * typing a message warms the model up before the user hits send. */
+  const prefetchModel = () => {
+    if (
+      !loadingModelUrl &&
+      (status === "idle" || (status === "ready" && modelMismatch))
+    ) {
+      handleModelLoad(settings.modelUrl);
+    }
+  };
+
   const handleAsk = () => {
     const text = input.trim();
     if (!text) return;
-    if (status === "loading" || status === "downloading") return;
 
-    // Auto-load: with no model running (or one that doesn't match this
-    // conversation's settings), load first and send the message once ready.
+    // A load is already in flight (e.g. started while typing) — queue the
+    // message if it targets these settings; it flushes once ready.
+    if (status === "loading" || status === "downloading") {
+      if (pendingLoadKeyRef.current === settingsKey(settings)) {
+        queueUserMessage(text);
+      }
+      return;
+    }
+
+    // Auto-load: with no model running (or one that doesn't match the
+    // current settings), load first and send the message once ready.
     if (status === "idle" || (status === "ready" && modelMismatch)) {
-      pendingAskRef.current = { text, conversationId: active.id };
-      setInput("");
-      updateConversation(active.id, {
-        title:
-          active.messages.length === 0
-            ? text.length > 40
-              ? `${text.slice(0, 40)}…`
-              : text
-            : active.title,
-        messages: [
-          ...active.messages.map((m) =>
-            m.id === "streaming" ? { ...m, id: crypto.randomUUID() } : m,
-          ),
-          {
-            id: crypto.randomUUID(),
-            role: "user",
-            content: text,
-            timestamp: Date.now(),
-          },
-        ] as StoredMessage[],
-      });
+      queueUserMessage(text);
       send({
         type: "load",
         options: {
@@ -877,7 +902,11 @@ export default function App() {
                     : "Loading model…"
               }
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Warm the model up as soon as the user starts typing.
+                if (e.target.value.trim()) prefetchModel();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

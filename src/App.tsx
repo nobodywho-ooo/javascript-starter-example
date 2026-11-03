@@ -98,10 +98,22 @@ export default function App() {
   }, [active.id]);
 
   // Refs for scrolling the chat log.
+  const messagesRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll chat.
+  const statusRef = useRef(status);
   useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Auto-scroll chat — but never while tokens are streaming in, and only
+  // when the reader is already at (or near) the bottom, so scrolling back
+  // through a response is never interrupted.
+  useEffect(() => {
+    if (statusRef.current === "generating") return;
+    const el = messagesRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distance > 48) return; // user has scrolled up
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [active.messages]);
 
@@ -520,7 +532,7 @@ export default function App() {
         )}
 
         <main className="chat-area">
-          <div className="messages">
+          <div className="messages" ref={messagesRef}>
             {active.messages.length === 0 && (
               <div className="empty-state">
                 <Eyebrow>NobodyWho web chat</Eyebrow>

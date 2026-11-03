@@ -2,7 +2,7 @@
 
 export type StoredMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "error";
   content: string;
   timestamp: number;
 };

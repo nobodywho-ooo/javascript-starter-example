@@ -24,7 +24,6 @@
   --sec-rule: #22181a61;
   --sec-dot: #22181a38;
   --sec-accent: #97410d;
-  --scrim: rgba(233, 226, 216, 0.94);
 
   display: flex;
   flex-direction: row;
@@ -51,7 +50,6 @@
     --sec-rule: rgba(244, 237, 230, 0.34);
     --sec-dot: rgba(244, 237, 230, 0.16);
     --sec-accent: var(--nw-accent);
-    --scrim: var(--nw-scrim);
   }
 }
 
@@ -92,9 +90,11 @@
   margin: 0;
 }
 
-.conv-head .nw-btn {
+.conv-head .nw-btn,
+.conv-foot .nw-btn {
   padding: 6px 10px;
   font-size: 13px;
+  flex: none;
 }
 
 .conv-list {
@@ -172,27 +172,57 @@
   color: var(--nw-rust);
 }
 
-/* --- Header --- */
-.app-head {
+/* --- Sidebar brand --- */
+.conv-brand {
+  flex: none;
+  padding: 18px 20px 0;
+}
+
+.conv-brand .nw-logo {
+  color: var(--sec-ink);
+}
+
+/* --- Sidebar footer: tok/s box above status + settings --- */
+.conv-foot {
+  position: relative;
+  flex: none;
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--sec-rule);
+}
+
+.conv-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+}
+
+/* In the footer, the badge becomes a status bar: it fills the space left
+   of the Settings button, so it never sits at an odd offset or truncates
+   unpredictably */
+.conv-foot .status {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Compact header, shown only on small screens where the sidebar is hidden */
+.m-head {
+  position: relative;
+  display: none;
+  flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  flex: none;
-  padding: 0 var(--pad-x);
-  height: var(--nav-h-compact);
+  gap: 12px;
+  padding: 12px var(--pad-x);
   background: var(--sec-bg-2);
   border-bottom: 1px solid var(--sec-rule);
-}
-
-.app-head .nw-logo {
-  font-size: 22px;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 14px;
 }
 
 /* Status — square mono badge, hairline border, no pills */
@@ -207,6 +237,14 @@
   white-space: nowrap;
 }
 
+/* Metric readouts (tok/s) read better without the uppercase label style,
+   and tabular figures keep the number from jittering as it updates */
+.status-metric {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
 .status-ready,
 .status-generating {
   border-color: var(--sec-accent);
@@ -219,37 +257,27 @@
   color: var(--nw-rust);
 }
 
-/* --- Settings drawer --- */
-.drawer-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  background: var(--scrim);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  animation: scrim-in 0.25s ease;
-}
-
-.drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 21;
-  width: min(420px, 92vw);
+/* --- Settings popover --- */
+.settings-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 0;
+  z-index: 30;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(620px, calc(100dvh - 96px));
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 28px;
-  padding: 28px var(--pad-x) 40px;
+  padding: 24px;
   background: var(--sec-bg-2);
-  border-left: 1px solid var(--sec-rule);
-  animation: drawer-in 0.25s ease;
+  border: 1px solid var(--sec-rule);
+  animation: pop-in 0.2s ease;
   scrollbar-width: thin;
   scrollbar-color: var(--sec-rule) transparent;
 }
 
-.drawer-head {
+.popover-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -258,25 +286,31 @@
   border-bottom: 1px solid var(--sec-rule);
 }
 
-.drawer-head .nw-eyebrow {
+.popover-head .nw-eyebrow {
   margin: 0;
 }
 
-@keyframes scrim-in {
-  from {
-    opacity: 0;
-  }
+.popover-note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sec-muted);
 }
 
-@keyframes drawer-in {
+.popover-note .warn {
+  color: var(--nw-rust);
+}
+
+@keyframes pop-in {
   from {
-    transform: translateX(100%);
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer-scrim,
-  .drawer {
+  .settings-popover {
     animation: none;
   }
 }
@@ -471,59 +505,14 @@
   background: transparent;
 }
 
-/* --- Error & model notes --- */
-.error-note {
-  flex: none;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 18px;
-  margin: 0 var(--pad-x);
-  padding: 14px 16px;
-  border: 1px solid var(--nw-rust);
-}
-
-.error-note .label {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+/* Error rows — rust hairline, mono label */
+.msg-error .msg-who {
   color: var(--nw-rust);
 }
 
-.error-note p {
-  margin: 0;
-  font-size: var(--type-body-sm);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.error-note .error-dismiss {
-  appearance: none;
-  background: none;
-  border: 0;
-  padding: 2px 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.msg-error .bubble {
+  border-color: var(--nw-rust);
   color: var(--sec-muted);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.error-note .error-dismiss:hover {
-  color: var(--sec-ink);
-}
-
-.model-note {
-  flex: none;
-  margin: 14px var(--pad-x) 0;
-  padding-top: 12px;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  color: var(--sec-muted);
-  border-top: 1px solid var(--sec-rule);
 }
 
 /* --- Input area --- */
@@ -608,6 +597,19 @@
     display: none;
   }
 
+  .m-head {
+    display: flex;
+  }
+
+  .settings-popover {
+    bottom: auto;
+    top: calc(100% + 8px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(520px, calc(100dvh - 140px));
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -615,9 +617,5 @@
   .msg {
     grid-template-columns: 1fr;
     gap: 8px;
-  }
-
-  .status {
-    display: none;
   }
 }

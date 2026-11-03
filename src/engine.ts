@@ -114,11 +114,29 @@ export class Engine {
    */
   async load(opts: LoadOptions): Promise<void> {
     this.events.onStatus("loading");
+    let reportedDownload = false;
     try {
       this.events.onLog(`Resolving ${opts.url}...`);
-      // Step 1: Explicit download step (returns local cached path).
-      const path = await downloadModel({ modelPath: opts.url });
+      // Step 1: Explicit download step (returns local cached path). The
+      // progress callback flips the status to "downloading" on the first
+      // byte, so an uncached model shows real progress instead of sitting
+      // on a silent "loading". A cached model emits nothing and stays on
+      // "loading".
+      const path = await downloadModel({
+        modelPath: opts.url,
+        onDownloadProgress: (downloaded, total) => {
+          if (!reportedDownload) {
+            reportedDownload = true;
+            this.events.onStatus("downloading");
+          }
+          if (total > 0n) {
+            this.events.onProgress(Number(downloaded) / Number(total));
+          }
+        },
+      });
       this.events.onLog(`Model is at ${path}`);
+      this.events.onProgress(0);
+      this.events.onStatus("loading");
 
       this.events.onLog(`Loading model (GPU: ${opts.useGpu})...`);
       // Step 2: Load the model.
@@ -142,6 +160,7 @@ export class Engine {
       this.events.onStatus("ready", `Max context: ${this.model.maxCtx}`);
     } catch (e) {
       this.events.onError(`Failed to load model: ${e}`);
+      this.events.onProgress(0);
       this.events.onStatus("idle");
     }
   }

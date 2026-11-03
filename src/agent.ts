@@ -11,6 +11,7 @@
 
 import type {
   EngineEvents,
+  HistoryMessage,
   LoadOptions,
   LogLevel,
 } from "./engine";
@@ -21,6 +22,7 @@ export type AgentCommand =
   | { type: "ask"; text: string }
   | { type: "stop" }
   | { type: "reset" }
+  | { type: "set-history"; messages: HistoryMessage[] }
   | { type: "unload" };
 
 export interface Agent {
@@ -96,9 +98,15 @@ export async function createAgent(
     // The engine yields a macrotask between tokens by default, so the UI
     // can stream and stay responsive on the main thread.
     const engine = new Engine(events);
+    // Serialize command execution: direct mode doesn't have the worker's
+    // natural ordering, and e.g. set-history must land before a follow-up
+    // ask, not interleaved with it.
+    let queue: Promise<void> = Promise.resolve();
     return {
-      send: async (command) => {
-        try {
+      send: (command) => {
+        queue = queue
+          .then(async () => {
+            try {
           switch (command.type) {
             case "list-models":
               await engine.listModels();
@@ -115,13 +123,19 @@ export async function createAgent(
             case "reset":
               await engine.resetHistory();
               break;
+            case "set-history":
+              await engine.setHistory(command.messages);
+              break;
             case "unload":
               engine.unload();
               break;
+            }
+          } catch (e) {
+            events.onError(String(e));
           }
-        } catch (e) {
-          events.onError(String(e));
-        }
+          })
+          // Keep the chain alive if a command throws.
+          .catch(() => undefined);
       },
     };
   }

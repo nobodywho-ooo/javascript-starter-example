@@ -8,6 +8,7 @@
 import {
   Model,
   Chat,
+  Tool,
   downloadModel,
   getCachedModels,
 } from "react-native-nobodywho";
@@ -78,7 +79,44 @@ export type LoadOptions = {  url: string;
   useGpu: boolean;
   threadCount: number; // 0 = auto
   systemPrompt: string;
+  /** Give the model a web-fetch tool (browser fetch — subject to CORS). */
+  enableWebTools?: boolean;
 };
+
+export type HistoryMessage = { role: "user" | "assistant"; content: string };
+
+/**
+ * Tools for the chat session. The `fetch_url` tool lets the model make HTTP
+ * GET requests from the browser — subject to the same CORS rules as any
+ * page script, so only CORS-enabled endpoints will work.
+ */
+function makeWebTools(): Tool[] {
+  return [
+    new Tool({
+      name: "fetch_url",
+      description:
+        "Fetch a URL with an HTTP GET request and return the response body " +
+        "as text. Use for APIs and web pages. Only URLs that allow " +
+        "cross-origin requests (CORS) will work.",
+      parameters: [{ name: "url", type: "string" }],
+      call: async (url: string) => {
+        try {
+          const res = await fetch(url, {
+            headers: { Accept: "text/plain, application/json, */*" },
+          });
+          if (!res.ok) {
+            return `HTTP error ${res.status} ${res.statusText}`;
+          }
+          const text = await res.text();
+          // Keep the context window small — models ramble on big pages.
+          return text.length > 4000 ? text.slice(0, 4000) + "…" : text;
+        } catch (e) {
+          return `Request failed: ${e}`;
+        }
+      },
+    }),
+  ];
+}
 
 export type EngineOptions = {
   /** Yield a macrotask between tokens so the host event loop stays
@@ -262,6 +300,7 @@ export class Engine {
         systemPrompt: opts.systemPrompt,
         // 0 means "auto" (omit the parameter).
         threadCount: opts.threadCount > 0 ? opts.threadCount : undefined,
+        tools: opts.enableWebTools ? makeWebTools() : undefined,
       });
 
       this.events.onStatus("ready", `Max context: ${this.model.maxCtx}`);
@@ -294,7 +333,16 @@ export class Engine {
     this.generating = true;
     try {
       const stream = await this.chat.ask(text);
+      // Debug: ms per token, one line per nextToken() call.
+      let last = 0;
+      let count = 0;
       for await (const token of stream) {
+        const now = performance.now();
+        count += 1;
+        if (last > 0) {
+          this.events.onLog(`engine decode: tok ${count} ${ (now - last).toFixed(1)}ms`, "info");
+        }
+        last = now;
         if (this.stopRequested) break;
         this.events.onToken(token);
         if (this.yieldBetweenTokens) {
@@ -351,6 +399,25 @@ export class Engine {
     }
     await this.chat?.resetHistory();
     this.events.onLog("Chat history reset.");
+  }
+
+  /** Replace the session's chat history (e.g. when switching conversations
+   * or after loading a model mid-conversation). */
+  async setHistory(messages: HistoryMessage[]): Promise<void> {
+    if (!this.chat) return;
+    if (this.generating) {
+      // Same flush-to-completion hazard as resetHistory — stop first.
+      this.chat.stopGeneration();
+      this.stopRequested = true;
+    }
+    await this.chat.setChatHistory(
+      messages.map((m) =>
+        m.role === "user"
+          ? { role: "user" as const, content: m.content }
+          : { role: "assistant" as const, content: m.content },
+      ),
+    );
+    this.events.onLog(`Chat history loaded (${messages.length} messages).`);
   }
 
   unload(): void {

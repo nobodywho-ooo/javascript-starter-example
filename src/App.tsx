@@ -3,7 +3,7 @@ import "./App.css";
 import "./ds/styles.css";
 import { Button, Eyebrow, Wordmark } from "./ds/ui";
 import { createAgent, type Agent, type AgentCommand } from "./agent";
-import type { CachedModel, EngineStatus } from "./engine";
+import type { CachedModel, EngineStatus, HistoryMessage } from "./engine";
 import {
   DEFAULT_SYSTEM_PROMPT,
   loadActiveConversationId,
@@ -148,6 +148,7 @@ export default function App() {
           modelUrl: SUGGESTED_MODELS[0].url,
           useGpu: false,
           threadCount: 0, // 0 = auto
+          enableWebTools: false,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
         });
     if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
@@ -171,6 +172,9 @@ export default function App() {
   // Set when a load command is sent, confirmed when the engine reports ready.
   const pendingLoadUrlRef = useRef<string | null>(null);
   const pendingLoadKeyRef = useRef<string | null>(null);
+  // True from load command to load completion — used to sync conversation
+  // history into the freshly-initialized engine session.
+  const loadInFlightRef = useRef(false);
   // Tokens/second: a fast 3s rolling window while generating, and the rate
   // over the entire last generation once it finishes.
   const [liveTps, setLiveTps] = useState(0);
@@ -220,12 +224,46 @@ export default function App() {
     () => loadSettings().useWorkerThread,
   );
 
-  // The agent holds event callbacks that outlive renders, so keep a ref to
-  // the active conversation id for use inside those callbacks.
+  // The agent holds event callbacks that outlive renders, so keep refs to
+  // the active conversation id and the conversation list for use inside
+  // those callbacks.
   const activeIdRef = useRef(active.id);
   useEffect(() => {
     activeIdRef.current = active.id;
   }, [active.id]);
+  const conversationsRef = useRef(conversations);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  /** Build engine chat history from a conversation's stored messages.
+   * `excludeLastUserText` drops a just-queued user message that the
+   * following ask() will add itself. */
+  const historyFor = (
+    conversationId: string,
+    excludeLastUserText?: string,
+  ): HistoryMessage[] => {
+    const conv = conversationsRef.current.find((c) => c.id === conversationId);
+    const msgs = (conv?.messages ?? []).filter(
+      (m) =>
+        (m.role === "user" || m.role === "assistant") &&
+        m.id !== "streaming" &&
+        m.content.trim() !== "",
+    );
+    const last = msgs[msgs.length - 1];
+    if (
+      excludeLastUserText !== undefined &&
+      last &&
+      last.role === "user" &&
+      last.content === excludeLastUserText
+    ) {
+      msgs.pop();
+    }
+    return msgs.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+  };
 
   // Refs for scrolling the chat log.
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -300,6 +338,9 @@ export default function App() {
       onStatus: (s, msg) => {
         setStatus(s);
         setStatusMessage(msg);
+        if (s === "loading" || s === "downloading") {
+          loadInFlightRef.current = true;
+        }
         if (s === "generating") {
           // Start a fresh tokens/second measurement for this generation.
           genTokensRef.current = 0;
@@ -313,6 +354,23 @@ export default function App() {
           setLoadingModelUrl(null);
         }
         if (s === "ready") {
+          const justLoaded = loadInFlightRef.current;
+          loadInFlightRef.current = false;
+          // A freshly-loaded session starts with an empty history — sync
+          // the engine with the active conversation's stored messages. If a
+          // queued message is about to be asked, exclude it (the ask below
+          // adds it itself).
+          if (justLoaded) {
+            const queued = pendingAskRef.current;
+            const excluded =
+              queued && queued.conversationId === activeIdRef.current
+                ? queued.text
+                : undefined;
+            send({
+              type: "set-history",
+              messages: historyFor(activeIdRef.current, excluded),
+            });
+          }
           // A load finished — confirm the model row states.
           setLoadedModelUrl(pendingLoadUrlRef.current);
           setLoadedKey(pendingLoadKeyRef.current);
@@ -476,8 +534,8 @@ export default function App() {
     if (id === active.id) return;
     setActiveId(id);
     setInput("");
-    // Fresh engine context for the conversation we switch to.
-    send({ type: "reset" });
+    // Load the target conversation's history into the engine session.
+    send({ type: "set-history", messages: historyFor(id) });
     // Drop untouched drafts left behind — they were never visible in the
     // sidebar, so silently discarding them keeps state tidy.
     setConversations((prev) =>
@@ -534,6 +592,7 @@ export default function App() {
         useGpu: settings.useGpu,
         threadCount: settings.threadCount,
         systemPrompt: settings.systemPrompt,
+        enableWebTools: settings.enableWebTools,
       },
     });
   };
@@ -588,6 +647,7 @@ export default function App() {
           useGpu: settings.useGpu,
           threadCount: settings.threadCount,
           systemPrompt: settings.systemPrompt,
+          enableWebTools: settings.enableWebTools,
         },
       });
       pendingLoadUrlRef.current = settings.modelUrl;
@@ -737,6 +797,14 @@ export default function App() {
           <label className="settings-check">
             <input
               type="checkbox"
+              checked={settings.enableWebTools}
+              onChange={(e) => setSettings({ enableWebTools: e.target.checked })}
+            />
+            Web tools — fetch_url (requires model reload)
+          </label>
+          <label className="settings-check">
+            <input
+              type="checkbox"
               checked={useWorker}
               onChange={(e) => setUseWorker(e.target.checked)}
             />
@@ -786,14 +854,17 @@ export default function App() {
 
   // One merged status readout: download/load progress while busy, tokens
   // per second otherwise (live window while generating, last run when idle).
+  // Rendered both as tok/s and ms per token — they're reciprocals, but ms
+  // reads more directly when comparing per-token costs.
+  const tps = status === "generating" ? liveTps : lastRunTps;
   const statusLabel =
     status === "downloading"
       ? `downloading ${Math.round(progress * 100)}%`
       : status === "loading"
         ? "loading…"
-        : status === "generating"
-          ? `${liveTps.toFixed(1)} tok/s`
-          : `${lastRunTps.toFixed(1)} tok/s`;
+        : tps > 0
+          ? `${tps.toFixed(1)} tok/s · ${(1000 / tps).toFixed(1)} ms/tok`
+          : "0 tok/s";
 
   const isMetric =
     status === "idle" || status === "ready" || status === "generating";

@@ -45,6 +45,9 @@ self.onmessage = async (event: MessageEvent<AgentCommand>) => {
       case "reset":
         await engine.resetHistory();
         break;
+      case "set-history":
+        await engine.setHistory(command.messages);
+        break;
       case "unload":
         engine.unload();
         break;

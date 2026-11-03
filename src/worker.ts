@@ -10,7 +10,8 @@ import type { AgentCommand } from "./agent";
 import { Engine } from "./engine";
 
 const engine = new Engine({
-  onLog: (message) => postMessage({ type: "log", payload: message }),
+  onLog: (message, level = "info") =>
+    postMessage({ type: "log", payload: { message, level } }),
   onStatus: (status, message) =>
     postMessage({ type: "status", payload: { status, message } }),
   onProgress: (fraction) => postMessage({ type: "progress", payload: fraction }),

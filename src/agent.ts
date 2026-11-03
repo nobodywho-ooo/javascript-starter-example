@@ -12,6 +12,7 @@
 import type {
   EngineEvents,
   LoadOptions,
+  LogLevel,
 } from "./engine";
 
 export type AgentCommand =
@@ -30,7 +31,7 @@ export interface Agent {
 
 // Event types posted from the worker to the main thread.
 type WorkerEvent =
-  | { type: "log"; payload: string }
+  | { type: "log"; payload: { message: string; level: LogLevel } }
   | { type: "status"; payload: { status: any; message?: string } }
   | { type: "progress"; payload: number }
   | { type: "token"; payload: string }
@@ -40,7 +41,7 @@ type WorkerEvent =
 function dispatch(events: EngineEvents, event: WorkerEvent): void {
   switch (event.type) {
     case "log":
-      events.onLog(event.payload);
+      events.onLog(event.payload.message, event.payload.level);
       break;
     case "status":
       events.onStatus(event.payload.status, event.payload.message);

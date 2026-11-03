@@ -8,7 +8,6 @@
 import {
   Model,
   Chat,
-  TokenStream,
   downloadModel,
   getCachedModels,
 } from "react-native-nobodywho";
@@ -33,8 +32,10 @@ export type EngineStatus =
   | "ready" // Ready to chat
   | "generating"; // Currently streaming tokens
 
+export type LogLevel = "info" | "warn" | "error";
+
 export interface EngineEvents {
-  onLog(message: string): void;
+  onLog(message: string, level?: LogLevel): void;
   onStatus(status: EngineStatus, message?: string): void;
   onProgress(fraction: number): void;
   onToken(token: string): void;
@@ -53,7 +54,6 @@ export class Engine {
   private events: EngineEvents;
   private model: Model | null = null;
   private chat: Chat | null = null;
-  private stream: TokenStream | null = null;
 
   constructor(events: EngineEvents) {
     this.events = events;
@@ -139,13 +139,12 @@ export class Engine {
 
   async ask(text: string): Promise<void> {
     if (!this.chat) {
-      this.events.onError("No model loaded.");
+      this.events.onLog("No model loaded — load a model before asking.", "warn");
       return;
     }
     this.events.onStatus("generating");
     try {
       const stream = await this.chat.ask(text);
-      this.stream = stream;
       for await (const token of stream) {
         this.events.onToken(token);
       }
@@ -153,7 +152,6 @@ export class Engine {
     } catch (e) {
       this.events.onError(`Generation failed: ${e}`);
     } finally {
-      this.stream = null;
       this.events.onStatus("ready");
     }
   }
@@ -171,7 +169,6 @@ export class Engine {
     this.chat = null;
     this.model?.destroy();
     this.model = null;
-    this.stream = null;
     this.events.onStatus("idle");
     this.events.onLog("Model unloaded.");
   }

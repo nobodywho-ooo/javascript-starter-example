@@ -1,0 +1,10 @@
+/* Section tones. Every section sets one; components read --sec-* so they re-colour automatically. */
+:root{--sec-bg:#3d0f11;--sec-bg-2:#2c090b;--sec-ink:#f4ede6;--sec-muted:rgba(244,237,230,0.68);--sec-rule:rgba(244,237,230,0.34);--sec-dot:rgba(244,237,230,0.16);--sec-accent:#f2a02e}
+.t-garnet{--sec-bg:#3d0f11;--sec-bg-2:#3d0f11;--sec-ink:#f4ede6;--sec-muted:rgba(244,237,230,0.68);--sec-rule:rgba(244,237,230,0.34);--sec-dot:rgba(244,237,230,0.16);--sec-accent:#f2a02e}
+.t-garnet-deep{--sec-bg:#2a080a;--sec-bg-2:#2a080a;--sec-ink:#f4ede6;--sec-muted:rgba(244,237,230,0.66);--sec-rule:rgba(244,237,230,0.3);--sec-dot:rgba(244,237,230,0.16);--sec-accent:#f2a02e}
+.t-paper{--sec-bg:#e9e2d8;--sec-bg-2:#e9e2d8;--sec-ink:#22181a;--sec-muted:rgba(34,24,26,0.64);--sec-rule:rgba(34,24,26,0.38);--sec-dot:rgba(34,24,26,0.22);--sec-accent:#c9501f}
+.t-white{--sec-bg:#f8f5f0;--sec-bg-2:#f8f5f0;--sec-ink:#1c1416;--sec-muted:rgba(28,20,22,0.62);--sec-rule:rgba(28,20,22,0.3);--sec-dot:rgba(28,20,22,0.2);--sec-accent:#c9501f}
+.t-ink{--sec-bg:#141011;--sec-bg-2:#141011;--sec-ink:#f4ede6;--sec-muted:rgba(244,237,230,0.66);--sec-rule:rgba(244,237,230,0.32);--sec-dot:rgba(244,237,230,0.16);--sec-accent:#f2a02e}
+.t-stone{--sec-bg:#cbc3b8;--sec-bg-2:#cbc3b8;--sec-ink:#1e1618;--sec-muted:rgba(30,22,24,0.66);--sec-rule:rgba(30,22,24,0.38);--sec-dot:rgba(30,22,24,0.24);--sec-accent:#b8431a}
+.t-amber{--sec-bg:#ec9a2c;--sec-bg-2:#ec9a2c;--sec-ink:#2a0709;--sec-muted:rgba(42,7,9,0.72);--sec-rule:rgba(42,7,9,0.4);--sec-dot:rgba(42,7,9,0.28);--sec-accent:#4e1411}
+[class*="t-"]{background-color:var(--sec-bg);color:var(--sec-ink)}

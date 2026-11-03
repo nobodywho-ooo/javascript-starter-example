@@ -1,3 +1,59 @@
+/*
+ * Theming: light theme is the default; dark is picked up automatically
+ * from the OS/browser preference (`prefers-color-scheme`).
+ * `color-scheme` makes native form controls and scrollbars match too.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #ffffff;
+  --bg-elevated: #f6f7f9;
+  --border: #d8dce3;
+  --text: #24292f;
+  --text-muted: #57606a;
+  --accent: #2f6feb;
+  --accent-contrast: #ffffff;
+  --bubble-assistant: #eef1f5;
+  --btn-bg: #eaeef2;
+  --btn-bg-hover: #dbe3ea;
+  --badge-bg: #eaeef2;
+
+  --status-ready-bg: #d9f0de;
+  --status-ready-fg: #1a7f37;
+  --status-generating-bg: #2f6feb;
+  --status-generating-fg: #ffffff;
+  --status-busy-bg: #fff3cd;
+  --status-busy-fg: #9a6700;
+  --status-idle-bg: #eaeef2;
+  --status-idle-fg: #57606a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1b26;
+    --bg-elevated: #16161e;
+    --border: #2f334d;
+    --text: #a9b1d6;
+    --text-muted: #565f89;
+    --accent: #7aa2f7;
+    --accent-contrast: #16161e;
+    --bubble-assistant: #24283b;
+    --btn-bg: #2f334d;
+    --btn-bg-hover: #414868;
+    --badge-bg: #2f334d;
+
+    --status-ready-bg: #1a6132;
+    --status-ready-fg: #9ece6a;
+    --status-generating-bg: #565f89;
+    --status-generating-fg: #c0caf5;
+    --status-busy-bg: #784712;
+    --status-busy-fg: #e0af68;
+    --status-idle-bg: #2f334d;
+    --status-idle-fg: #565f89;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -9,8 +65,8 @@
   flex-direction: column;
   height: 100vh;
   font-family: system-ui, -apple-system, sans-serif;
-  background: #1a1b26;
-  color: #a9b1d6;
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* --- Header --- */
@@ -19,13 +75,13 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: #16161e;
-  border-bottom: 1px solid #2f334d;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
 }
 
 header h1 {
   font-size: 1.1rem;
-  color: #c0caf5;
+  color: var(--text);
 }
 
 .header-controls {
@@ -38,15 +94,31 @@ header h1 {
   font-size: 0.75rem;
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: #2f334d;
+  background: var(--badge-bg);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.status-ready { background: #1a6132; color: #9ece6a; }
-.status-generating { background: #565f89; color: #c0caf5; }
-.status-loading, .status-downloading { background: #784712; color: #e0af68; }
-.status-idle { background: #2f334d; color: #565f89; }
+.status-ready {
+  background: var(--status-ready-bg);
+  color: var(--status-ready-fg);
+}
+
+.status-generating {
+  background: var(--status-generating-bg);
+  color: var(--status-generating-fg);
+}
+
+.status-loading,
+.status-downloading {
+  background: var(--status-busy-bg);
+  color: var(--status-busy-fg);
+}
+
+.status-idle {
+  background: var(--status-idle-bg);
+  color: var(--status-idle-fg);
+}
 
 .icon-btn {
   background: none;
@@ -59,8 +131,8 @@ header h1 {
 /* --- Settings --- */
 .settings-panel {
   padding: 1rem;
-  background: #16161e;
-  border-bottom: 1px solid #2f334d;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -70,7 +142,7 @@ header h1 {
 
 .settings-panel h2 {
   font-size: 0.9rem;
-  color: #7aa2f7;
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-top: 0.5rem;
@@ -78,7 +150,7 @@ header h1 {
 
 .settings-panel h3 {
   font-size: 0.8rem;
-  color: #565f89;
+  color: var(--text-muted);
 }
 
 .settings-panel label {
@@ -86,22 +158,22 @@ header h1 {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #565f89;
+  color: var(--text-muted);
 }
 
 .settings-panel label.checkbox {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
-  color: #a9b1d6;
+  color: var(--text);
   cursor: pointer;
 }
 
 .settings-panel select,
 .settings-panel textarea {
-  background: #24283b;
-  color: #c0caf5;
-  border: 1px solid #2f334d;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.4rem;
   font-size: 0.85rem;
@@ -134,7 +206,7 @@ header h1 {
 }
 
 .cached-model .size {
-  color: #565f89;
+  color: var(--text-muted);
   min-width: 4rem;
   text-align: right;
 }
@@ -152,7 +224,7 @@ header h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #565f89;
+  color: var(--text-muted);
 }
 
 .messages {
@@ -186,14 +258,14 @@ header h1 {
 }
 
 .message.user .bubble {
-  background: #7aa2f7;
-  color: #16161e;
+  background: var(--accent);
+  color: var(--accent-contrast);
   border-bottom-right-radius: 4px;
 }
 
 .message.assistant .bubble {
-  background: #24283b;
-  color: #c0caf5;
+  background: var(--bubble-assistant);
+  color: var(--text);
   border-bottom-left-radius: 4px;
 }
 
@@ -201,15 +273,15 @@ header h1 {
   display: flex;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  border-top: 1px solid #2f334d;
-  background: #16161e;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
 }
 
 .input-area input {
   flex: 1;
-  background: #24283b;
-  color: #c0caf5;
-  border: 1px solid #2f334d;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.6rem;
   font-size: 0.95rem;
@@ -221,8 +293,8 @@ header h1 {
 }
 
 button {
-  background: #2f334d;
-  color: #c0caf5;
+  background: var(--btn-bg);
+  color: var(--text);
   border: none;
   border-radius: 6px;
   padding: 0.5rem 1rem;
@@ -231,7 +303,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #414868;
+  background: var(--btn-bg-hover);
 }
 
 button:disabled {
@@ -241,8 +313,8 @@ button:disabled {
 
 /* --- Logs --- */
 .log-panel {
-  border-top: 1px solid #2f334d;
-  background: #16161e;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
   height: 150px;
   display: flex;
   flex-direction: column;
@@ -251,10 +323,10 @@ button:disabled {
 .log-header {
   padding: 0.4rem 1rem;
   font-size: 0.75rem;
-  color: #565f89;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 1px solid #2f334d;
+  border-bottom: 1px solid var(--border);
 }
 
 .log-content {
@@ -263,6 +335,6 @@ button:disabled {
   padding: 0.5rem 1rem;
   font-family: monospace;
   font-size: 0.75rem;
-  color: #565f89;
+  color: var(--text-muted);
   line-height: 1.5;
 }

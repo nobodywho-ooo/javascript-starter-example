@@ -107,32 +107,32 @@ export async function createAgent(
         queue = queue
           .then(async () => {
             try {
-          switch (command.type) {
-            case "list-models":
-              await engine.listModels();
-              break;
-            case "load":
-              await engine.load(command.options);
-              break;
-            case "ask":
-              await engine.ask(command.text);
-              break;
-            case "stop":
-              engine.stop();
-              break;
-            case "reset":
-              await engine.resetHistory();
-              break;
-            case "set-history":
-              await engine.setHistory(command.messages);
-              break;
-            case "unload":
-              engine.unload();
-              break;
+              switch (command.type) {
+                case "list-models":
+                  await engine.listModels();
+                  break;
+                case "load":
+                  await engine.load(command.options);
+                  break;
+                case "ask":
+                  await engine.ask(command.text);
+                  break;
+                case "stop":
+                  engine.stop();
+                  break;
+                case "reset":
+                  await engine.resetHistory();
+                  break;
+                case "set-history":
+                  await engine.setHistory(command.messages);
+                  break;
+                case "unload":
+                  engine.unload();
+                  break;
+              }
+            } catch (e) {
+              events.onError(String(e));
             }
-          } catch (e) {
-            events.onError(String(e));
-          }
           })
           // Keep the chain alive if a command throws.
           .catch(() => undefined);

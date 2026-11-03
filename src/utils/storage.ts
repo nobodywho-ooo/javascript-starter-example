@@ -11,8 +11,9 @@ export type StoredMessage = {
 export type ConversationSettings = {
   modelUrl: string;
   useGpu: boolean;
-  threadCount: number; // 0 = auto
   systemPrompt: string;
+  /** Thinking mode for templates that support it (Qwen3-style). */
+  enableThinking: boolean;
 };
 
 export type Conversation = {
@@ -42,8 +43,8 @@ export const defaultSettings: Settings = {
   model: {
     modelUrl: "", // empty = fall back to the app's suggested default model
     useGpu: false,
-    threadCount: 0, // 0 = auto
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
+    enableThinking: true,
   },
 };
 

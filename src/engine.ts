@@ -76,8 +76,10 @@ export interface EngineEvents {
 
 export type LoadOptions = {  url: string;
   useGpu: boolean;
-  threadCount: number; // 0 = auto
   systemPrompt: string;
+  /** Thinking-mode toggle for chat templates that support it
+   * (Qwen3-style `enable_thinking`). Omitted = template default. */
+  enableThinking?: boolean;
 };
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string };
@@ -262,8 +264,12 @@ export class Engine {
       this.chat = new Chat({
         model: this.model,
         systemPrompt: opts.systemPrompt,
-        // 0 means "auto" (omit the parameter).
-        threadCount: opts.threadCount > 0 ? opts.threadCount : undefined,
+        // The constructor replaces the template variables wholesale, so only
+        // pass them when the user has actually expressed a preference.
+        templateVariables:
+          opts.enableThinking !== undefined
+            ? { enable_thinking: opts.enableThinking }
+            : undefined,
       });
 
       this.events.onStatus("ready", `Max context: ${this.model.maxCtx}`);

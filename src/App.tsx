@@ -120,7 +120,7 @@ function isEmptyConversation(c: Conversation): boolean {
 
 /** Identity of the model configuration an engine session is running. */
 function settingsKey(s: ConversationSettings): string {
-  return JSON.stringify([s.modelUrl, s.useGpu, s.threadCount, s.systemPrompt]);
+  return JSON.stringify([s.modelUrl, s.useGpu, s.systemPrompt, s.enableThinking]);
 }
 
 export default function App() {
@@ -147,10 +147,12 @@ export default function App() {
       : (legacy ?? {
           modelUrl: SUGGESTED_MODELS[0].url,
           useGpu: false,
-          threadCount: 0, // 0 = auto
+          enableThinking: true,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
         });
     if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
+    // Older stored settings predate the field — default it on.
+    base.enableThinking ??= true;
     return base;
   });
   const setSettings = (patch: Partial<ConversationSettings>) => {
@@ -597,8 +599,8 @@ export default function App() {
       options: {
         url,
         useGpu: settings.useGpu,
-        threadCount: settings.threadCount,
         systemPrompt: settings.systemPrompt,
+        enableThinking: settings.enableThinking,
       },
     });
   };
@@ -651,8 +653,7 @@ export default function App() {
         options: {
           url: settings.modelUrl,
           useGpu: settings.useGpu,
-          threadCount: settings.threadCount,
-          systemPrompt: settings.systemPrompt,
+            systemPrompt: settings.systemPrompt,
         },
       });
       pendingLoadUrlRef.current = settings.modelUrl;
@@ -802,27 +803,19 @@ export default function App() {
           <label className="settings-check">
             <input
               type="checkbox"
+              checked={settings.enableThinking}
+              onChange={(e) => setSettings({ enableThinking: e.target.checked })}
+            />
+            Enable thinking
+          </label>
+          <label className="settings-check">
+            <input
+              type="checkbox"
               checked={useWorker}
               onChange={(e) => setUseWorker(e.target.checked)}
             />
             Run inference in Web Worker
           </label>
-          <div className="nw-field">
-            <label htmlFor="thread-count">
-              CPU threads (
-              {settings.threadCount === 0 ? "auto" : settings.threadCount})
-            </label>
-            <input
-              id="thread-count"
-              type="range"
-              min={0}
-              max={16}
-              value={settings.threadCount}
-              onChange={(e) =>
-                setSettings({ threadCount: Number(e.target.value) })
-              }
-            />
-          </div>
           <div className="nw-field nw-field--full">
             <label htmlFor="system-prompt">System prompt</label>
             <textarea

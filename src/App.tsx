@@ -148,12 +148,9 @@ export default function App() {
           modelUrl: SUGGESTED_MODELS[0].url,
           useGpu: false,
           threadCount: 0, // 0 = auto
-          enableWebTools: true,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
         });
     if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
-    // Older stored settings predate the field — default it on.
-    base.enableWebTools ??= true;
     return base;
   });
   const setSettings = (patch: Partial<ConversationSettings>) => {
@@ -602,7 +599,6 @@ export default function App() {
         useGpu: settings.useGpu,
         threadCount: settings.threadCount,
         systemPrompt: settings.systemPrompt,
-        enableWebTools: settings.enableWebTools,
       },
     });
   };
@@ -657,7 +653,6 @@ export default function App() {
           useGpu: settings.useGpu,
           threadCount: settings.threadCount,
           systemPrompt: settings.systemPrompt,
-          enableWebTools: settings.enableWebTools,
         },
       });
       pendingLoadUrlRef.current = settings.modelUrl;
@@ -803,14 +798,6 @@ export default function App() {
               onChange={(e) => setSettings({ useGpu: e.target.checked })}
             />
             Use WebGPU
-          </label>
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={settings.enableWebTools}
-              onChange={(e) => setSettings({ enableWebTools: e.target.checked })}
-            />
-            Web tools — fetch_url
           </label>
           <label className="settings-check">
             <input

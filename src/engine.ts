@@ -8,7 +8,6 @@
 import {
   Model,
   Chat,
-  Tool,
   downloadModel,
   getCachedModels,
 } from "react-native-nobodywho";
@@ -79,44 +78,9 @@ export type LoadOptions = {  url: string;
   useGpu: boolean;
   threadCount: number; // 0 = auto
   systemPrompt: string;
-  /** Give the model a web-fetch tool (browser fetch — subject to CORS). */
-  enableWebTools?: boolean;
 };
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string };
-
-/**
- * Tools for the chat session. The `fetch_url` tool lets the model make HTTP
- * GET requests from the browser — subject to the same CORS rules as any
- * page script, so only CORS-enabled endpoints will work.
- */
-function makeWebTools(): Tool[] {
-  return [
-    new Tool({
-      name: "fetch_url",
-      description:
-        "Fetch a URL with an HTTP GET request and return the response body " +
-        "as text. Use for APIs and web pages. Only URLs that allow " +
-        "cross-origin requests (CORS) will work.",
-      parameters: [{ name: "url", type: "string" }],
-      call: async (url: string) => {
-        try {
-          const res = await fetch(url, {
-            headers: { Accept: "text/plain, application/json, */*" },
-          });
-          if (!res.ok) {
-            return `HTTP error ${res.status} ${res.statusText}`;
-          }
-          const text = await res.text();
-          // Keep the context window small — models ramble on big pages.
-          return text.length > 4000 ? text.slice(0, 4000) + "…" : text;
-        } catch (e) {
-          return `Request failed: ${e}`;
-        }
-      },
-    }),
-  ];
-}
 
 export type EngineOptions = {
   /** Yield a macrotask between tokens so the host event loop stays
@@ -300,7 +264,6 @@ export class Engine {
         systemPrompt: opts.systemPrompt,
         // 0 means "auto" (omit the parameter).
         threadCount: opts.threadCount > 0 ? opts.threadCount : undefined,
-        tools: opts.enableWebTools ? makeWebTools() : undefined,
       });
 
       this.events.onStatus("ready", `Max context: ${this.model.maxCtx}`);

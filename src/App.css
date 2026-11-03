@@ -27,11 +27,18 @@
   --scrim: rgba(233, 226, 216, 0.94);
 
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100dvh;
   font-family: var(--font-sans);
   background-color: var(--sec-bg);
   color: var(--sec-ink);
+}
+
+.main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,6 +66,110 @@
 
 .mono {
   font-family: var(--font-mono);
+}
+
+/* --- Conversations sidebar --- */
+.conv-sidebar {
+  flex: none;
+  width: 264px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sec-bg-2);
+  border-right: 1px solid var(--sec-rule);
+}
+
+.conv-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--sec-rule);
+}
+
+.conv-head .nw-eyebrow {
+  margin: 0;
+}
+
+.conv-head .nw-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.conv-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sec-rule) transparent;
+}
+
+.conv-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--sec-rule);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.conv-item:hover .t,
+.conv-item:focus-visible .t {
+  color: var(--sec-accent);
+}
+
+.conv-item .t {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 56px;
+}
+
+.conv-item.is-active .t {
+  color: var(--sec-accent);
+}
+
+.conv-item .meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--sec-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-item .conv-del {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sec-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.conv-item:hover .conv-del,
+.conv-item:focus-within .conv-del {
+  opacity: 1;
+}
+
+.conv-item .conv-del:hover {
+  color: var(--nw-rust);
 }
 
 /* --- Header --- */
@@ -337,11 +448,82 @@
   color: var(--sec-accent);
 }
 
-.msg-body {
+.msg-body,
+.msg .bubble {
   font-size: var(--type-body);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Bubbles — hairline boxes, radius 0, no shadows */
+.msg .bubble {
+  border: 1px solid var(--sec-rule);
+  padding: 14px 16px;
+  max-width: 62ch;
+}
+
+.msg-user .bubble {
+  background: var(--sec-bg-2);
+}
+
+.msg-assistant .bubble {
+  background: transparent;
+}
+
+/* --- Error & model notes --- */
+.error-note {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 18px;
+  margin: 0 var(--pad-x);
+  padding: 14px 16px;
+  border: 1px solid var(--nw-rust);
+}
+
+.error-note .label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nw-rust);
+}
+
+.error-note p {
+  margin: 0;
+  font-size: var(--type-body-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.error-note .error-dismiss {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sec-muted);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.error-note .error-dismiss:hover {
+  color: var(--sec-ink);
+}
+
+.model-note {
+  flex: none;
+  margin: 14px var(--pad-x) 0;
+  padding-top: 12px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--sec-muted);
+  border-top: 1px solid var(--sec-rule);
 }
 
 /* --- Input area --- */
@@ -422,6 +604,10 @@
 
 /* --- Responsive --- */
 @media (max-width: 760px) {
+  .conv-sidebar {
+    display: none;
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }

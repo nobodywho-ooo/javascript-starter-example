@@ -50,13 +50,22 @@ export type LoadOptions = {
   systemPrompt: string;
 };
 
+export type EngineOptions = {
+  /** Yield a macrotask between tokens so the UI can paint while generating
+   * on the main thread. Not needed in a Web Worker (postMessage already
+   * delivers tokens as macrotasks to the main thread). */
+  yieldBetweenTokens?: boolean;
+};
+
 export class Engine {
   private events: EngineEvents;
   private model: Model | null = null;
   private chat: Chat | null = null;
+  private yieldBetweenTokens: boolean;
 
-  constructor(events: EngineEvents) {
+  constructor(events: EngineEvents, options: EngineOptions = {}) {
     this.events = events;
+    this.yieldBetweenTokens = options.yieldBetweenTokens ?? false;
   }
 
   // --- Commands ---
@@ -147,6 +156,11 @@ export class Engine {
       const stream = await this.chat.ask(text);
       for await (const token of stream) {
         this.events.onToken(token);
+        if (this.yieldBetweenTokens) {
+          // Give the event loop a macrotask so the browser can paint and
+          // React can flush renders between tokens on the main thread.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
       this.events.onLog("Generation finished.");
     } catch (e) {

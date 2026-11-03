@@ -51,9 +51,9 @@ export type LoadOptions = {
 };
 
 export type EngineOptions = {
-  /** Yield a macrotask between tokens so the UI can paint while generating
-   * on the main thread. Not needed in a Web Worker (postMessage already
-   * delivers tokens as macrotasks to the main thread). */
+  /** Yield a macrotask between tokens so the host event loop stays
+   * responsive — the browser can paint on the main thread, and a worker can
+   * process incoming commands (e.g. "stop") mid-generation. */
   yieldBetweenTokens?: boolean;
 };
 
@@ -65,7 +65,7 @@ export class Engine {
 
   constructor(events: EngineEvents, options: EngineOptions = {}) {
     this.events = events;
-    this.yieldBetweenTokens = options.yieldBetweenTokens ?? false;
+    this.yieldBetweenTokens = options.yieldBetweenTokens ?? true;
   }
 
   // --- Commands ---

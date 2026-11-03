@@ -90,10 +90,9 @@ export async function createAgent(
     // Dynamically imported so we don't load the WASM on the main thread
     // unless we actually need it.
     const { Engine } = await import("./engine");
-    // On the main thread the WASM stream resolves through microtasks, which
-    // starves the event loop and freezes the UI until generation ends — so
-    // yield between tokens to keep the UI streaming.
-    const engine = new Engine(events, { yieldBetweenTokens: true });
+    // The engine yields a macrotask between tokens by default, so the UI
+    // can stream and stay responsive on the main thread.
+    const engine = new Engine(events);
     return {
       send: async (command) => {
         try {

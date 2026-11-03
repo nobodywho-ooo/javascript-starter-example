@@ -5,8 +5,10 @@ import { Button, Eyebrow, Wordmark } from "./ds/ui";
 import { createAgent, type Agent, type AgentCommand } from "./agent";
 import type { CachedModel, EngineStatus } from "./engine";
 import {
+  DEFAULT_SYSTEM_PROMPT,
   loadActiveConversationId,
   loadConversations,
+  loadLegacyModelSettings,
   loadSettings,
   saveActiveConversationId,
   saveConversations,
@@ -21,8 +23,6 @@ type SuggestedModel = {
   name: string;
   url: string;
   size: string;
-  /** Set when the model likely exceeds the current WebGPU budget. */
-  warning?: string;
 };
 
 const SUGGESTED_MODELS: SuggestedModel[] = [
@@ -65,23 +65,34 @@ const SUGGESTED_MODELS: SuggestedModel[] = [
     name: "SmolLM3 3B (Q4_K_M)",
     url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf",
     size: "1.8 GB",
-    warning: "Model size exceeds the current WebGPU budget and may fail to load.",
   },
   {
     name: "Ministral 3 3B Instruct 2512 (Q4_K_M)",
     url: "https://huggingface.co/unsloth/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
     size: "2.0 GB",
-    warning: "Model size exceeds the current WebGPU budget and may fail to load.",
   },
   {
     name: "Gemma 4 E2B IT (Q4_K_M)",
     url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
     size: "2.9 GB",
-    warning: "Model size exceeds the current WebGPU budget and may fail to load.",
   },
 ];
 
-const DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant.";
+/** Filename part of a URL or filesystem path. */
+function filenameOf(pathOrUrl: string): string {
+  return pathOrUrl.split("/").pop() ?? pathOrUrl;
+}
+
+/** Parse a human size like "218.7 MB" or "1.2 GB" into bytes, for sorting. */
+function parseSizeBytes(size: string): number {
+  const match = size.match(/^([\d.]+)\s*(KB|MB|GB|TB)$/i);
+  if (!match) return Number.POSITIVE_INFINITY;
+  const mult =
+    { kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4 }[
+      match[2].toLowerCase()
+    ] ?? 1;
+  return parseFloat(match[1]) * mult;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -91,7 +102,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
 }
 
-function makeConversation(modelUrl: string): Conversation {
+function makeConversation(): Conversation {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
@@ -99,13 +110,12 @@ function makeConversation(modelUrl: string): Conversation {
     createdAt: now,
     updatedAt: now,
     messages: [],
-    settings: {
-      modelUrl,
-      useGpu: false,
-      threadCount: 0, // 0 = auto
-      systemPrompt: DEFAULT_SYSTEM_PROMPT,
-    },
   };
+}
+
+/** A conversation the user never used: nothing written, still untitled. */
+function isEmptyConversation(c: Conversation): boolean {
+  return c.messages.length === 0 && c.title === "New conversation";
 }
 
 /** Identity of the model configuration an engine session is running. */
@@ -116,17 +126,36 @@ function settingsKey(s: ConversationSettings): string {
 export default function App() {
   // --- Conversations ---
   const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const stored = loadConversations();
-    return stored.length > 0
-      ? stored
-      : [makeConversation(SUGGESTED_MODELS[0].url)];
+    // Drop conversations the user never wrote anything in — otherwise empty
+    // "New conversation" entries accumulate across restarts.
+    const stored = loadConversations().filter((c) => !isEmptyConversation(c));
+    return stored.length > 0 ? stored : [makeConversation()];
   });
   const [activeId, setActiveId] = useState<string>(
     () => loadActiveConversationId() ?? "",
   );
   const active =
     conversations.find((c) => c.id === activeId) ?? conversations[0];
-  const settings = active.settings;
+
+  // Model/engine settings are global — shared by every conversation.
+  const [settings, setSettingsState] = useState<ConversationSettings>(() => {
+    const stored = loadSettings().model;
+    // Migration: model settings used to be stored per conversation.
+    const legacy = stored.modelUrl ? null : loadLegacyModelSettings();
+    const base = stored.modelUrl
+      ? stored
+      : (legacy ?? {
+          modelUrl: SUGGESTED_MODELS[0].url,
+          useGpu: false,
+          threadCount: 0, // 0 = auto
+          systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        });
+    if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
+    return base;
+  });
+  const setSettings = (patch: Partial<ConversationSettings>) => {
+    setSettingsState((prev) => ({ ...prev, ...patch }));
+  };
 
   // --- Engine state (global — one engine session) ---
   const [status, setStatus] = useState<EngineStatus>("idle");
@@ -134,6 +163,14 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [models, setModels] = useState<CachedModel[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // The model URL the engine session is actually running, so per-model rows
+  // can show LOADED even if unrelated settings have changed since the load.
+  const [loadedModelUrl, setLoadedModelUrl] = useState<string | null>(null);
+  // The model a load command is currently fetching/initializing, if any.
+  const [loadingModelUrl, setLoadingModelUrl] = useState<string | null>(null);
+  // Set when a load command is sent, confirmed when the engine reports ready.
+  const pendingLoadUrlRef = useRef<string | null>(null);
+  const pendingLoadKeyRef = useRef<string | null>(null);
   // Tokens/second: a fast 3s rolling window while generating, and the rate
   // over the entire last generation once it finishes.
   const [liveTps, setLiveTps] = useState(0);
@@ -182,11 +219,14 @@ export default function App() {
 
   // --- Persistence ---
   useEffect(() => {
-    // Don't persist the streaming placeholder — only completed messages.
-    const completed = conversations.map((c) => ({
-      ...c,
-      messages: c.messages.filter((m) => m.id !== "streaming"),
-    }));
+    // Don't persist the streaming placeholder — only completed messages —
+    // and don't persist conversations the user never wrote anything in.
+    const completed = conversations
+      .filter((c) => !isEmptyConversation(c))
+      .map((c) => ({
+        ...c,
+        messages: c.messages.filter((m) => m.id !== "streaming"),
+      }));
     saveConversations(completed);
   }, [conversations]);
 
@@ -198,8 +238,8 @@ export default function App() {
   }, [active.id, activeId]);
 
   useEffect(() => {
-    saveSettings({ useWorkerThread: useWorker });
-  }, [useWorker]);
+    saveSettings({ useWorkerThread: useWorker, model: settings });
+  }, [useWorker, settings]);
 
   // --- Console logging with proper levels ---
   const log = useCallback(
@@ -232,6 +272,15 @@ export default function App() {
           genStartRef.current = null;
           setLiveTps(0);
           setLastRunTps(0);
+          // Nothing is loaded (unloaded, failed load, or stopped download).
+          setLoadedModelUrl(null);
+          setLoadingModelUrl(null);
+        }
+        if (s === "ready") {
+          // A load finished — confirm the model row states.
+          setLoadedModelUrl(pendingLoadUrlRef.current);
+          setLoadedKey(pendingLoadKeyRef.current);
+          setLoadingModelUrl(null);
         }
         // Finalize any streaming placeholder with a real id once generation
         // ends, so keys stay unique and messages get persisted — in every
@@ -280,6 +329,11 @@ export default function App() {
         }
       },
       onProgress: setProgress,
+      onTokens: (count) => {
+        // Attribute the session's context usage to whichever conversation
+        // was active during generation.
+        updateConversation(activeIdRef.current, { tokens: count });
+      },
       onToken: (token) => {
         // Live tokens/second over a 3s rolling window (pure decode speed —
         // the window starts at the first token, so prompt processing and
@@ -384,20 +438,27 @@ export default function App() {
     );
   };
 
-  const setSettings = (patch: Partial<ConversationSettings>) => {
-    updateConversation(active.id, { settings: { ...settings, ...patch } });
-  };
-
   const switchConversation = (id: string) => {
     if (id === active.id) return;
     setActiveId(id);
     setInput("");
     // Fresh engine context for the conversation we switch to.
     send({ type: "reset" });
+    // Drop untouched drafts left behind — they were never visible in the
+    // sidebar, so silently discarding them keeps state tidy.
+    setConversations((prev) =>
+      prev.filter((c) => c.id === id || !isEmptyConversation(c)),
+    );
   };
 
   const createConversation = () => {
-    const conv = makeConversation(settings.modelUrl);
+    // Reuse the current untouched draft instead of stacking up invisible
+    // empty conversations.
+    if (isEmptyConversation(active)) {
+      setInput("");
+      return;
+    }
+    const conv = makeConversation();
     setConversations((prev) => [conv, ...prev]);
     setActiveId(conv.id);
     setInput("");
@@ -407,7 +468,7 @@ export default function App() {
   const deleteConversation = (id: string) => {
     const next = conversations.filter((c) => c.id !== id);
     const result =
-      next.length > 0 ? next : [makeConversation(settings.modelUrl)];
+      next.length > 0 ? next : [makeConversation()];
     setConversations(result);
     if (id === active.id) {
       const fallback = result[0];
@@ -418,26 +479,29 @@ export default function App() {
 
   // --- Handlers ---
 
-  const handleDownload = () => {
-    send({ type: "download", url: settings.modelUrl });
+  const handleUnload = () => {
+    // Don't clear state here: the engine may defer the unload (e.g. during
+    // generation), so let the status events ("idle") confirm it.
+    send({ type: "unload" });
   };
 
-  const handleLoad = () => {
+  /** SELECT and DOWNLOAD both point the session at a model and load it; the
+   * engine fetches it first if it isn't cached. */
+  const handleModelLoad = (url: string) => {
+    if (status === "loading" || status === "downloading") return;
+    setSettings({ modelUrl: url });
+    pendingLoadUrlRef.current = url;
+    pendingLoadKeyRef.current = settingsKey({ ...settings, modelUrl: url });
+    setLoadingModelUrl(url);
     send({
       type: "load",
       options: {
-        url: settings.modelUrl,
+        url,
         useGpu: settings.useGpu,
         threadCount: settings.threadCount,
         systemPrompt: settings.systemPrompt,
       },
     });
-    setLoadedKey(settingsKey(settings));
-  };
-
-  const handleUnload = () => {
-    setLoadedKey(null);
-    send({ type: "unload" });
   };
 
   const handleAsk = () => {
@@ -478,7 +542,9 @@ export default function App() {
           systemPrompt: settings.systemPrompt,
         },
       });
-      setLoadedKey(settingsKey(settings));
+      pendingLoadUrlRef.current = settings.modelUrl;
+      pendingLoadKeyRef.current = settingsKey(settings);
+      setLoadingModelUrl(settings.modelUrl);
       return;
     }
 
@@ -514,10 +580,48 @@ export default function App() {
     send({ type: "ask", text });
   };
 
-  const handleReset = () => {
-    updateConversation(active.id, { messages: [] });
-    send({ type: "reset" });
+  // Unified model rows: the suggested models plus any cached models that
+  // aren't in the suggested list, ordered smallest → largest. Each row's
+  // state picks its action: LOADED (click = unload), SELECT (cached), or
+  // DOWNLOAD (remote; click = download and load).
+  type ModelRow = {
+    key: string;
+    url: string;
+    name: string;
+    sizeBytes: number;
+    state: "loaded" | "cached" | "remote";
   };
+  const modelRows: ModelRow[] = (() => {
+    const rows = new Map<string, ModelRow>();
+    // The cache listing returns local paths, while suggested models are
+    // keyed by URL — match them up by filename instead.
+    const cachedByFilename = new Map(
+      models.map((m) => [filenameOf(m.path), m]),
+    );
+    for (const m of SUGGESTED_MODELS) {
+      const cached = cachedByFilename.get(filenameOf(m.url));
+      if (cached) cachedByFilename.delete(filenameOf(m.url));
+      rows.set(m.url, {
+        key: m.url,
+        url: m.url,
+        name: m.name,
+        sizeBytes: cached ? cached.size : parseSizeBytes(m.size),
+        state:
+          loadedModelUrl === m.url ? "loaded" : cached ? "cached" : "remote",
+      });
+    }
+    // Cached models outside the suggested list (e.g. custom URLs).
+    for (const m of cachedByFilename.values()) {
+      rows.set(m.path, {
+        key: m.path,
+        url: m.path,
+        name: filenameOf(m.path),
+        sizeBytes: m.size,
+        state: loadedModelUrl === m.path ? "loaded" : "cached",
+      });
+    }
+    return [...rows.values()].sort((a, b) => a.sizeBytes - b.sizeBytes);
+  })();
 
   const isBusy =
     status === "loading" || status === "downloading" || status === "generating";
@@ -525,12 +629,13 @@ export default function App() {
   const modelMismatch =
     loadedKey !== null && loadedKey !== settingsKey(settings);
 
-  const selectedModel = SUGGESTED_MODELS.find(
-    (m) => m.url === settings.modelUrl,
-  );
-
   const sortedConversations = [...conversations].sort(
     (a, b) => b.updatedAt - a.updatedAt,
+  );
+  // Sidebar shows only conversations the user has actually written in — a
+  // fresh draft appears there once its first message is sent.
+  const visibleConversations = sortedConversations.filter(
+    (c) => !isEmptyConversation(c),
   );
 
   // Settings popover body — rendered in the sidebar footer (desktop) and
@@ -538,70 +643,35 @@ export default function App() {
   const settingsBody = (
     <>
       <div className="settings-group">
-        <Eyebrow>Model</Eyebrow>
-        <p className="popover-note">
-          Settings apply to this conversation
-          {active.messages.length === 0 && active.title === "New conversation"
-            ? "."
-            : ` – “${active.title}”.`}
-        </p>
-        <div className="nw-field">
-          <label htmlFor="model-url">Model</label>
-          <div className="sel">
-            <select
-              id="model-url"
-              value={settings.modelUrl}
-              onChange={(e) => setSettings({ modelUrl: e.target.value })}
-            >
-              {SUGGESTED_MODELS.map((m) => (
-                <option key={m.url} value={m.url}>
-                  {m.name}
-                </option>
-              ))}
-              {!SUGGESTED_MODELS.some((m) => m.url === settings.modelUrl) && (
-                <option value={settings.modelUrl}>{settings.modelUrl}</option>
-              )}
-            </select>
-          </div>
-        </div>
-        {selectedModel && (
-          <p className="popover-note">
-            {selectedModel.size}
-            {selectedModel.warning && (
-              <span className="warn"> – {selectedModel.warning}</span>
-            )}
-          </p>
-        )}
         <div className="cached-models">
-          <Eyebrow>Cached models – {models.length}</Eyebrow>
-          {models.length === 0 && <p className="empty">Nothing cached yet.</p>}
-          {models.map((m) => (
-            <div key={m.path} className="cached-model">
-              <span className="path">{m.path.split("/").pop()}</span>
-              <span className="size">{formatBytes(m.size)}</span>
-              <Button
-                variant="outline"
-                onClick={() => setSettings({ modelUrl: m.path })}
-              >
-                Select
-              </Button>
+          <Eyebrow>Models</Eyebrow>
+          {modelRows.map((row) => (
+            <div key={row.key} className="cached-model">
+              <span className="path">{row.name}</span>
+              <span className="size">{formatBytes(row.sizeBytes)}</span>
+              {row.state === "loaded" ? (
+                <Button variant="outline" onClick={handleUnload}>
+                  Loaded
+                </Button>
+              ) : loadingModelUrl === row.url ? (
+                // In flight: download progress on the button, then a brief
+                // “loading” while the engine initializes, then LOADED.
+                <Button disabled>
+                  {status === "downloading"
+                    ? `${Math.round(progress * 100)}%`
+                    : "loading…"}
+                </Button>
+              ) : (
+                <Button
+                  variant={row.state === "cached" ? "outline" : "solid"}
+                  onClick={() => handleModelLoad(row.url)}
+                  disabled={isBusy}
+                >
+                  {row.state === "cached" ? "Select" : "Download"}
+                </Button>
+              )}
             </div>
           ))}
-        </div>
-        <div className="nw-actions">
-          <Button onClick={handleDownload} disabled={isBusy}>
-            Download model
-          </Button>
-          <Button onClick={handleLoad} disabled={isBusy}>
-            Load model
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleUnload}
-            disabled={status === "idle"}
-          >
-            Unload model
-          </Button>
         </div>
       </div>
 
@@ -696,14 +766,8 @@ export default function App() {
         <div className="conv-brand">
           <Wordmark size={20} />
         </div>
-        <div className="conv-head">
-          <Eyebrow>Conversations</Eyebrow>
-          <Button variant="outline" onClick={createConversation}>
-            New
-          </Button>
-        </div>
         <div className="conv-list">
-          {sortedConversations.map((c) => {
+          {visibleConversations.map((c) => {
             // A brand-new conversation has no title yet — show it without
             // one until the user has written something.
             const untitled = c.messages.length === 0 && c.title === "New conversation";
@@ -722,10 +786,7 @@ export default function App() {
               }}
             >
               {!untitled && <span className="t">{c.title}</span>}
-              <span className="meta">
-                {c.messages.length} messages ·{" "}
-                {c.settings.modelUrl.split("/").pop()?.replace(/\.gguf$/i, "")}
-              </span>
+              <span className="meta">{c.tokens ?? 0} tokens</span>
               <button
                 className="conv-del"
                 onClick={(e) => {
@@ -739,6 +800,22 @@ export default function App() {
             </div>
             );
           })}
+          <div
+            role="button"
+            tabIndex={0}
+            className={`conv-item conv-item-new${
+              isEmptyConversation(active) ? " is-draft" : ""
+            }`}
+            onClick={createConversation}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                createConversation();
+              }
+            }}
+          >
+            + New conversation
+          </div>
         </div>
         <div className="conv-foot">
           {settingsPopover}
@@ -824,14 +901,6 @@ export default function App() {
                 Send
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={status !== "ready"}
-              title="Clear conversation history"
-            >
-              Reset
-            </Button>
           </div>
         </main>
       </div>

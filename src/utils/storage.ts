@@ -7,6 +7,7 @@ export type StoredMessage = {
   timestamp: number;
 };
 
+/** Model/engine settings — global, shared by every conversation. */
 export type ConversationSettings = {
   modelUrl: string;
   useGpu: boolean;
@@ -20,7 +21,8 @@ export type Conversation = {
   createdAt: number;
   updatedAt: number;
   messages: StoredMessage[];
-  settings: ConversationSettings;
+  /** Context tokens used as of the last generation in this conversation. */
+  tokens?: number;
 };
 
 const CONVERSATIONS_KEY = "nobodywho-conversations";
@@ -30,10 +32,19 @@ const SETTINGS_KEY = "nobodywho-settings";
 /** App-level settings (engine-level, not per conversation). */
 export type Settings = {
   useWorkerThread: boolean;
+  model: ConversationSettings;
 };
+
+export const DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant.";
 
 export const defaultSettings: Settings = {
   useWorkerThread: true,
+  model: {
+    modelUrl: "", // empty = fall back to the app's suggested default model
+    useGpu: false,
+    threadCount: 0, // 0 = auto
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  },
 };
 
 function isConversation(value: unknown): value is Conversation {
@@ -42,9 +53,37 @@ function isConversation(value: unknown): value is Conversation {
   return (
     typeof c.id === "string" &&
     typeof c.title === "string" &&
-    Array.isArray(c.messages) &&
-    typeof c.settings?.modelUrl === "string"
+    Array.isArray(c.messages)
   );
+}
+
+/**
+ * One-time migration: model settings used to live per conversation. Returns
+ * the newest stored conversation's settings, or null if there are none.
+ */
+export function loadLegacyModelSettings(): ConversationSettings | null {
+  try {
+    const data = localStorage.getItem(CONVERSATIONS_KEY);
+    if (!data) return null;
+    const parsed: unknown = JSON.parse(data);
+    if (!Array.isArray(parsed)) return null;
+    const withSettings = parsed
+      .filter(
+        (c): c is { updatedAt: number; settings: ConversationSettings } =>
+          typeof c === "object" &&
+          c !== null &&
+          typeof (c as Record<string, unknown>).updatedAt === "number" &&
+          typeof (
+            (c as Record<string, unknown>).settings as
+              | Record<string, unknown>
+              | undefined
+          )?.modelUrl === "string",
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    return withSettings[0]?.settings ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function loadConversations(): Conversation[] {

@@ -76,21 +76,21 @@
   border-right: 1px solid var(--sec-rule);
 }
 
-.conv-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--sec-rule);
+.conv-item-new {
+  color: var(--sec-muted);
 }
 
-.conv-head .nw-eyebrow {
-  margin: 0;
+.conv-item-new:hover,
+.conv-item-new:focus-visible {
+  color: var(--sec-accent);
 }
 
-.conv-head .nw-btn,
+/* Draft mode: the active conversation is an untouched new draft — highlight
+   the entry so the sidebar reflects where you are. */
+.conv-item-new.is-draft {
+  color: var(--sec-accent);
+}
+
 .conv-foot .nw-btn {
   padding: 6px 10px;
   font-size: 13px;
@@ -196,7 +196,7 @@
 
 .conv-foot-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 0;
   width: 100%;
@@ -210,6 +210,11 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Stretch to the row height (set by the Settings button) and center the
+     label, so the tok/s box and the button are exactly the same height */
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
 }
 
 /* Compact header, shown only on small screens where the sidebar is hidden */
@@ -258,13 +263,17 @@
 }
 
 /* --- Settings popover --- */
+/* A floating popover, sized to 80% of the viewport and centered. position:
+   fixed escapes the sidebar; the transform centering is accounted for in
+   the pop-in keyframes so the animation doesn't cancel it out. */
 .settings-popover {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 0;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 30;
-  width: min(360px, calc(100vw - 32px));
-  max-height: min(620px, calc(100dvh - 96px));
+  width: 80vw;
+  height: 80dvh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -275,6 +284,12 @@
   animation: pop-in 0.2s ease;
   scrollbar-width: thin;
   scrollbar-color: var(--sec-rule) transparent;
+}
+
+.settings-popover > * {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
 }
 
 .popover-head {
@@ -305,7 +320,7 @@
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translate(-50%, calc(-50% + 6px));
   }
 }
 
@@ -382,6 +397,9 @@
 
 .cached-models .nw-eyebrow {
   margin: 0 0 4px;
+  /* Single separator under the section header — rows flow without lines */
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sec-rule);
 }
 
 .cached-models .empty {
@@ -397,11 +415,6 @@
   align-items: center;
   gap: 18px;
   padding: 12px 0;
-  border-top: 1px solid var(--sec-rule);
-}
-
-.cached-model:last-child {
-  border-bottom: 1px solid var(--sec-rule);
 }
 
 .cached-model .path {
@@ -580,12 +593,7 @@
   }
 
   .settings-popover {
-    bottom: auto;
-    top: calc(100% + 8px);
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-height: min(520px, calc(100dvh - 140px));
+    padding: max(16px, env(safe-area-inset-top)) 16px 24px;
   }
 
   .settings-grid {

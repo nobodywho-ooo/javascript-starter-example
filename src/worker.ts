@@ -9,6 +9,10 @@
 import type { AgentCommand } from "./agent";
 import { Engine } from "./engine";
 
+// Keep yieldBetweenTokens (default): the token loop must leave a macrotask
+// boundary for `stop` commands to be processed. engine.ts yields via
+// MessageChannel — no setTimeout's ~4ms clamp, so it costs ~nothing per
+// token.
 const engine = new Engine({
   onLog: (message, level = "info") =>
     postMessage({ type: "log", payload: { message, level } }),
@@ -16,6 +20,7 @@ const engine = new Engine({
     postMessage({ type: "status", payload: { status, message } }),
   onProgress: (fraction) => postMessage({ type: "progress", payload: fraction }),
   onToken: (token) => postMessage({ type: "token", payload: token }),
+  onTokens: (count) => postMessage({ type: "tokens", payload: count }),
   onError: (message) => postMessage({ type: "error", payload: message }),
   onModels: (models) => postMessage({ type: "models", payload: models }),
 });
@@ -27,9 +32,6 @@ self.onmessage = async (event: MessageEvent<AgentCommand>) => {
     switch (command.type) {
       case "list-models":
         await engine.listModels();
-        break;
-      case "download":
-        await engine.download(command.url);
         break;
       case "load":
         await engine.load(command.options);

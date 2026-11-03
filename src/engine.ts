@@ -12,6 +12,35 @@ import {
   getCachedModels,
 } from "react-native-nobodywho";
 
+// --- Event-loop yielding ---
+
+// Yield a *macrotask* between tokens. This is load-bearing for command
+// processing: in the WASM build the Rust futures and their wakers run on
+// microtasks (wasm-bindgen-futures), so a `for await` token loop with no
+// macrotask boundary becomes a microtask chain that starves `onmessage` —
+// e.g. a "stop" command would never run until generation finished.
+//
+// setTimeout(0) would also work, but browsers clamp nested timeouts to
+// ~4ms, throttling generation to ~250 tokens/s. A MessageChannel message is
+// a macrotask too, but fires immediately — same guarantee, no clamp. Falls
+// back to setTimeout where MessageChannel doesn't exist (e.g. Hermes).
+const yieldChannel: MessageChannel | null =
+  typeof MessageChannel === "function" ? new MessageChannel() : null;
+const yieldWaiters: Array<() => void> = [];
+if (yieldChannel) {
+  // Message order is FIFO, so waiters resolve in the order they queued.
+  yieldChannel.port1.onmessage = () => yieldWaiters.shift()?.();
+}
+function yieldMacrotask(): Promise<void> {
+  if (!yieldChannel) {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return new Promise((resolve) => {
+    yieldWaiters.push(resolve);
+    yieldChannel.port2.postMessage(null);
+  });
+}
+
 // --- Types shared with the UI ---
 
 export type CachedModel = {
@@ -39,6 +68,8 @@ export interface EngineEvents {
   onStatus(status: EngineStatus, message?: string): void;
   onProgress(fraction: number): void;
   onToken(token: string): void;
+  /** Context usage of the session, reported after each generation. */
+  onTokens(count: number): void;
   onError(message: string): void;
   onModels(models: CachedModel[]): void;
 }
@@ -70,6 +101,11 @@ export class Engine {
   private model: Model | null = null;
   private chat: Chat | null = null;
   private yieldBetweenTokens: boolean;
+  /** True while a generation task is using the model context. */
+  private generating = false;
+  /** Set by stop(); checked in the token loop so tokens already buffered in
+   * the Rust channel are dropped instead of streamed out after a stop. */
+  private stopRequested = false;
   private activeDownload: DownloadHandle | null = null;
 
   constructor(events: EngineEvents, options: EngineOptions = {}) {
@@ -162,28 +198,6 @@ export class Engine {
   }
 
   /**
-   * Explicitly download a model file to the local cache.
-   * Reports progress via `onProgress`.
-   */
-  async download(url: string): Promise<void> {
-    this.events.onLog(`Downloading ${url}...`);
-    this.events.onStatus("downloading");
-    try {
-      const path = await this.startDownload(url, (fraction) =>
-        this.events.onProgress(fraction),
-      );
-      if (!path) return; // stopped — status already reset by stop()
-      this.events.onLog("Download finished.");
-    } catch (e) {
-      this.events.onError(`Download failed: ${e}`);
-    } finally {
-      this.events.onProgress(0);
-      this.events.onStatus("idle");
-      this.listModels();
-    }
-  }
-
-  /**
    * Load a model into memory and initialize a chat session.
    * If the model isn't cached, this will download it first.
    */
@@ -237,6 +251,11 @@ export class Engine {
       this.events.onError(`Failed to load model: ${e}`);
       this.events.onProgress(0);
       this.events.onStatus("idle");
+    } finally {
+      // A load may have fetched the model into the cache — refresh the
+      // cached-models list either way, so the UI reflects the current
+      // cache state without waiting for a reload.
+      this.listModels();
     }
   }
 
@@ -246,21 +265,36 @@ export class Engine {
       return;
     }
     this.events.onStatus("generating");
+    this.stopRequested = false;
+    this.generating = true;
     try {
       const stream = await this.chat.ask(text);
       for await (const token of stream) {
+        if (this.stopRequested) break;
         this.events.onToken(token);
         if (this.yieldBetweenTokens) {
-          // Give the event loop a macrotask so the browser can paint and
-          // React can flush renders between tokens on the main thread.
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          // Macrotask boundary between tokens: lets the worker process
+          // incoming commands (e.g. "stop") and lets the main thread paint,
+          // without the ~4ms setTimeout clamp.
+          await yieldMacrotask();
         }
       }
       this.events.onLog("Generation finished.");
     } catch (e) {
       this.events.onError(`Generation failed: ${e}`);
     } finally {
+      this.generating = false;
       this.events.onStatus("ready");
+      // Report how many tokens the session now occupies, so the UI can
+      // track the conversation's context usage.
+      if (this.chat) {
+        try {
+          const stats = await this.chat.getStats();
+          this.events.onTokens(stats.contextUsed);
+        } catch {
+          // Stats unavailable (e.g. chat torn down mid-flight) — skip.
+        }
+      }
     }
   }
 
@@ -277,6 +311,7 @@ export class Engine {
       return;
     }
     this.chat?.stopGeneration();
+    this.stopRequested = true;
   }
 
   async resetHistory(): Promise<void> {
@@ -285,6 +320,24 @@ export class Engine {
   }
 
   unload(): void {
+    if (this.generating) {
+      // The generation task is still using the model context — destroying
+      // it now would be a use-after-free. Stop generation; the caller can
+      // unload again once it has wound down.
+      this.chat?.stopGeneration();
+      this.events.onLog(
+        "Generation stopped — call unload again to free the model.",
+        "warn",
+      );
+      return;
+    }
+    // Destroy the chat first: it owns the context/KV-cache and holds an Arc
+    // to the model, so the weights are only freed once it is gone. The
+    // explicit destroy matters on WASM — without it the Rust objects are
+    // freed only when the JS GC happens to run their finalizers, which can
+    // be long after unload (FinalizationRegistry timing is not
+    // memory-pressure aware).
+    this.chat?.destroy();
     this.chat = null;
     this.model?.destroy();
     this.model = null;

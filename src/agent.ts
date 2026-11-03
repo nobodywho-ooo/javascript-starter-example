@@ -17,7 +17,6 @@ import type {
 
 export type AgentCommand =
   | { type: "list-models" }
-  | { type: "download"; url: string }
   | { type: "load"; options: LoadOptions }
   | { type: "ask"; text: string }
   | { type: "stop" }
@@ -35,6 +34,7 @@ type WorkerEvent =
   | { type: "status"; payload: { status: any; message?: string } }
   | { type: "progress"; payload: number }
   | { type: "token"; payload: string }
+  | { type: "tokens"; payload: number }
   | { type: "error"; payload: string }
   | { type: "models"; payload: any[] };
 
@@ -51,6 +51,9 @@ function dispatch(events: EngineEvents, event: WorkerEvent): void {
       break;
     case "token":
       events.onToken(event.payload);
+      break;
+    case "tokens":
+      events.onTokens(event.payload);
       break;
     case "error":
       events.onError(event.payload);
@@ -99,9 +102,6 @@ export async function createAgent(
           switch (command.type) {
             case "list-models":
               await engine.listModels();
-              break;
-            case "download":
-              await engine.download(command.url);
               break;
             case "load":
               await engine.load(command.options);

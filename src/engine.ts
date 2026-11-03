@@ -43,8 +43,7 @@ export interface EngineEvents {
   onModels(models: CachedModel[]): void;
 }
 
-export type LoadOptions = {
-  url: string;
+export type LoadOptions = {  url: string;
   useGpu: boolean;
   threadCount: number; // 0 = auto
   systemPrompt: string;
@@ -57,11 +56,21 @@ export type EngineOptions = {
   yieldBetweenTokens?: boolean;
 };
 
+type DownloadHandle = {
+  url: string;
+  cancelled: boolean;
+  report: ((fraction: number) => void) | null;
+  /** Resolves with the cached path; rejects on failure. */
+  promise: Promise<string>;
+  cancel: () => void;
+};
+
 export class Engine {
   private events: EngineEvents;
   private model: Model | null = null;
   private chat: Chat | null = null;
   private yieldBetweenTokens: boolean;
+  private activeDownload: DownloadHandle | null = null;
 
   constructor(events: EngineEvents, options: EngineOptions = {}) {
     this.events = events;
@@ -83,6 +92,76 @@ export class Engine {
   }
 
   /**
+   * Start (or attach to) a model download. Concurrent requests for the same
+   * URL share one download — a second fetch would download the model twice
+   * and corrupt the shared partial `.part` file. A request for a different
+   * URL is rejected while one is in flight.
+   *
+   * The returned promise resolves with the cached path, or with "" if the
+   * download was stopped (the underlying fetch keeps going in the
+   * background — the library exposes no abort — but no further progress is
+   * reported and the status has already been reset by `stop()`).
+   */
+  private startDownload(
+    url: string,
+    report: ((fraction: number) => void) | null,
+  ): Promise<string> {
+    const active = this.activeDownload;
+    if (active && active.url !== url) {
+      throw new Error(
+        "Another download is already in progress — stop it first.",
+      );
+    }
+    if (active) {
+      // Same URL: share the in-flight download, re-attach reporting.
+      active.cancelled = false;
+      active.report = report;
+      return active.promise;
+    }
+    let cancelResolve: (path: string) => void = () => {};
+    const cancelledPromise = new Promise<string>((resolve) => {
+      cancelResolve = () => resolve("");
+    });
+    const handle: DownloadHandle = {
+      url,
+      cancelled: false,
+      report,
+      promise: Promise.resolve("") as Promise<string>,
+      cancel: () => {
+        handle.cancelled = true;
+        handle.report = null;
+        cancelResolve("");
+      },
+    };
+    handle.promise = (async () => {
+      try {
+        const path = await downloadModel({
+          modelPath: url,
+          onDownloadProgress: (downloaded, total) => {
+            if (handle.cancelled) return;
+            handle.report?.(
+              total > 0 ? Number(downloaded) / Number(total) : 0,
+            );
+          },
+        });
+        if (handle.cancelled) {
+          this.events.onLog("Background download finished.");
+        }
+        return path;
+      } catch (e) {
+        if (handle.cancelled) {
+          this.events.onLog(`Background download failed: ${e}`, "warn");
+        }
+        throw e;
+      } finally {
+        if (this.activeDownload === handle) this.activeDownload = null;
+      }
+    })();
+    this.activeDownload = handle;
+    return Promise.race([handle.promise, cancelledPromise]);
+  }
+
+  /**
    * Explicitly download a model file to the local cache.
    * Reports progress via `onProgress`.
    */
@@ -90,14 +169,10 @@ export class Engine {
     this.events.onLog(`Downloading ${url}...`);
     this.events.onStatus("downloading");
     try {
-      await downloadModel({
-        modelPath: url,
-        onDownloadProgress: (downloaded, total) => {
-          if (total > 0n) {
-            this.events.onProgress(Number(downloaded) / Number(total));
-          }
-        },
-      });
+      const path = await this.startDownload(url, (fraction) =>
+        this.events.onProgress(fraction),
+      );
+      if (!path) return; // stopped — status already reset by stop()
       this.events.onLog("Download finished.");
     } catch (e) {
       this.events.onError(`Download failed: ${e}`);
@@ -122,18 +197,18 @@ export class Engine {
       // byte, so an uncached model shows real progress instead of sitting
       // on a silent "loading". A cached model emits nothing and stays on
       // "loading".
-      const path = await downloadModel({
-        modelPath: opts.url,
-        onDownloadProgress: (downloaded, total) => {
-          if (!reportedDownload) {
-            reportedDownload = true;
-            this.events.onStatus("downloading");
-          }
-          if (total > 0n) {
-            this.events.onProgress(Number(downloaded) / Number(total));
-          }
-        },
+      const path = await this.startDownload(opts.url, (fraction) => {
+        if (!reportedDownload) {
+          reportedDownload = true;
+          this.events.onStatus("downloading");
+        }
+        this.events.onProgress(fraction);
       });
+      if (!path) {
+        // Stopped during the download — status already reset by stop().
+        this.events.onLog("Load cancelled during download.", "warn");
+        return;
+      }
       this.events.onLog(`Model is at ${path}`);
       this.events.onProgress(0);
       this.events.onStatus("loading");
@@ -190,6 +265,17 @@ export class Engine {
   }
 
   stop(): void {
+    const download = this.activeDownload;
+    if (download && !download.cancelled) {
+      // Stop a running download: reset the status now; the fetch itself
+      // keeps going in the background (no abort API) but is no longer
+      // reported, and finishing it still fills the cache.
+      download.cancel();
+      this.events.onLog("Download stopped — finishing in background.", "warn");
+      this.events.onProgress(0);
+      this.events.onStatus("idle");
+      return;
+    }
     this.chat?.stopGeneration();
   }
 

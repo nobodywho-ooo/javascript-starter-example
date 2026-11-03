@@ -69,7 +69,7 @@
 /* --- Conversations sidebar --- */
 .conv-sidebar {
   flex: none;
-  width: 264px;
+  width: 280px;
   display: flex;
   flex-direction: column;
   background: var(--sec-bg-2);
@@ -198,7 +198,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0;
   width: 100%;
 }
 
@@ -229,9 +229,9 @@
 .status {
   font-family: var(--font-mono);
   font-size: 13px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--sec-rule);
   color: var(--sec-muted);
   white-space: nowrap;
@@ -460,41 +460,24 @@
   text-wrap: balance;
 }
 
+/* Messages — user bubbles right, everything else left; no labels */
 .msg {
-  display: grid;
-  grid-template-columns: clamp(96px, 12vw, 160px) minmax(0, 1fr);
-  gap: 18px var(--gap-col);
-  padding: 22px 0;
-  border-top: 1px solid var(--sec-rule);
-  max-width: 76ch;
+  display: flex;
+  padding: 10px 0;
 }
 
-.msg-who {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding-top: 5px;
-  color: var(--sec-muted);
+.msg-user {
+  justify-content: flex-end;
 }
 
-.msg-user .msg-who {
-  color: var(--sec-accent);
-}
-
-.msg-body,
 .msg .bubble {
   font-size: var(--type-body);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-/* Bubbles — hairline boxes, radius 0, no shadows */
-.msg .bubble {
   border: 1px solid var(--sec-rule);
   padding: 14px 16px;
-  max-width: 62ch;
+  max-width: min(62ch, 80%);
 }
 
 .msg-user .bubble {
@@ -505,14 +488,9 @@
   background: transparent;
 }
 
-/* Error rows — rust hairline, mono label */
-.msg-error .msg-who {
-  color: var(--nw-rust);
-}
-
 .msg-error .bubble {
   border-color: var(--nw-rust);
-  color: var(--sec-muted);
+  color: var(--nw-rust);
 }
 
 /* --- Input area --- */
@@ -612,10 +590,5 @@
 
   .settings-grid {
     grid-template-columns: 1fr;
-  }
-
-  .msg {
-    grid-template-columns: 1fr;
-    gap: 8px;
   }
 }

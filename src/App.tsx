@@ -782,13 +782,6 @@ export default function App() {
             )}
             {active.messages.map((m) => (
               <div key={m.id} className={`msg msg-${m.role}`}>
-                <span className="msg-who">
-                  {m.role === "user"
-                    ? "You"
-                    : m.role === "error"
-                      ? "Error"
-                      : "NobodyWho"}
-                </span>
                 <div className="bubble">{m.content || "…"}</div>
               </div>
             ))}

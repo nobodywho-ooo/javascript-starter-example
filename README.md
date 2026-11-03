@@ -2,6 +2,8 @@
 
 A small React example showcasing using [NobodyWho](https://nobodywho.ai) in the browser.
 
+Completely vibed.
+
 ## Developing
 
 ```sh

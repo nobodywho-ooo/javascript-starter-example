@@ -175,13 +175,43 @@ export default function App() {
   // over the entire last generation once it finishes.
   const [liveTps, setLiveTps] = useState(0);
   const [lastRunTps, setLastRunTps] = useState(0);
-  const genStartRef = useRef<number | null>(null);
   const genTokensRef = useRef(0);
   const tokenTimesRef = useRef<number[]>([]);
   // A message queued while the model auto-loads; flushed on "ready".
   const pendingAskRef = useRef<{ text: string; conversationId: string } | null>(
     null,
   );
+  // Streamed tokens are buffered and flushed to state on a throttle, not per
+  // token: a per-token setConversations copies every conversation and every
+  // message, so its cost grows with history length — which is exactly why
+  // tok/s appeared to decay as conversations got longer.
+  const streamBufRef = useRef("");
+  const streamFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushStreamBuffer = useCallback(() => {
+    if (streamFlushRef.current !== null) {
+      clearTimeout(streamFlushRef.current);
+      streamFlushRef.current = null;
+    }
+    const chunk = streamBufRef.current;
+    if (!chunk) return;
+    streamBufRef.current = "";
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id !== activeIdRef.current) return c;
+        const last = c.messages[c.messages.length - 1];
+        if (last && last.id === "streaming") {
+          return {
+            ...c,
+            messages: [
+              ...c.messages.slice(0, -1),
+              { ...last, content: last.content + chunk },
+            ],
+          };
+        }
+        return c;
+      }),
+    );
+  }, []);
 
   // --- UI state ---
   const [input, setInput] = useState("");
@@ -257,6 +287,14 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
+    // A fresh engine has no model — never inherit status/loading state from
+    // a previous agent instance (StrictMode remount, HMR, worker toggle),
+    // or a send could race past the auto-load path.
+    setStatus("idle");
+    setLoadedKey(null);
+    setLoadedModelUrl(null);
+    setLoadingModelUrl(null);
+    setProgress(0);
     createAgent(useWorker, {
       onLog: log,
       onStatus: (s, msg) => {
@@ -264,12 +302,10 @@ export default function App() {
         setStatusMessage(msg);
         if (s === "generating") {
           // Start a fresh tokens/second measurement for this generation.
-          genStartRef.current = performance.now();
           genTokensRef.current = 0;
           tokenTimesRef.current = [];
           setLiveTps(0);
         } else if (s === "idle") {
-          genStartRef.current = null;
           setLiveTps(0);
           setLastRunTps(0);
           // Nothing is loaded (unloaded, failed load, or stopped download).
@@ -286,13 +322,18 @@ export default function App() {
         // ends, so keys stay unique and messages get persisted — in every
         // conversation, in case the user switched mid-generation.
         if (s === "ready") {
-          // Final rate over the entire last generation.
-          if (genStartRef.current !== null) {
-            const elapsed = (performance.now() - genStartRef.current) / 1000;
-            if (elapsed > 0) {
-              setLastRunTps(genTokensRef.current / elapsed);
+          // Apply any still-buffered tokens before the finalizer turns the
+          // streaming placeholder into a persisted message.
+          flushStreamBuffer();
+          // Final rate over the last generation, computed from the same
+          // rolling window the live badge uses — decode-only, since the
+          // window starts at the first token.
+          const times = tokenTimesRef.current;
+          if (times.length > 1) {
+            const span = (times[times.length - 1] - times[0]) / 1000;
+            if (span > 0) {
+              setLastRunTps(times.length / span);
             }
-            genStartRef.current = null;
           }
           setConversations((prev) =>
             prev.map((c) => ({
@@ -345,22 +386,11 @@ export default function App() {
         while (times.length > 0 && now - times[0] > 3000) times.shift();
         const span = Math.max((now - (times[0] ?? now)) / 1000, 0.5);
         setLiveTps(times.length / span);
-        setConversations((prev) =>
-          prev.map((c) => {
-            if (c.id !== activeIdRef.current) return c;
-            const last = c.messages[c.messages.length - 1];
-            if (last && last.id === "streaming") {
-              return {
-                ...c,
-                messages: [
-                  ...c.messages.slice(0, -1),
-                  { ...last, content: last.content + token },
-                ],
-              };
-            }
-            return c;
-          }),
-        );
+        // Buffer the token; the throttled flush applies it to state.
+        streamBufRef.current += token;
+        if (streamFlushRef.current === null) {
+          streamFlushRef.current = setTimeout(flushStreamBuffer, 50);
+        }
       },
       onError: (msg) => {
         log(msg, "error");
@@ -395,6 +425,10 @@ export default function App() {
     });
     return () => {
       disposed = true;
+      if (streamFlushRef.current !== null) {
+        clearTimeout(streamFlushRef.current);
+        streamFlushRef.current = null;
+      }
       agentRef.current?.dispose?.();
       agentRef.current = null;
     };
@@ -528,17 +562,6 @@ export default function App() {
         },
       ] as StoredMessage[],
     });
-  };
-
-  /** Start loading the model (no-op if it's already loaded or loading), so
-   * typing a message warms the model up before the user hits send. */
-  const prefetchModel = () => {
-    if (
-      !loadingModelUrl &&
-      (status === "idle" || (status === "ready" && modelMismatch))
-    ) {
-      handleModelLoad(settings.modelUrl);
-    }
   };
 
   const handleAsk = () => {
@@ -894,19 +917,9 @@ export default function App() {
             <input
               className="chat-input"
               type="text"
-              placeholder={
-                status === "ready"
-                  ? "Type a message"
-                  : status === "idle"
-                    ? "Type a message"
-                    : "Loading model…"
-              }
+              placeholder="Type a message"
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                // Warm the model up as soon as the user starts typing.
-                if (e.target.value.trim()) prefetchModel();
-              }}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

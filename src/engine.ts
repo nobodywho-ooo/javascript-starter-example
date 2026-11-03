@@ -282,13 +282,13 @@ export class Engine {
     // flushed after an unload won a race with the load meant for it.
     // Reload the last-used configuration so the message isn't lost.
     if (!this.chat && this.lastLoadOptions) {
+      // A message can arrive with no model loaded — e.g. a queued message
+      // flushed after an unload won a race with the load meant for it.
+      // Reload the last-used configuration so the message isn't lost.
       this.events.onLog("No model loaded — loading before answering.", "info");
       await this.load(this.lastLoadOptions);
     }
-    if (!this.chat) {
-      this.events.onLog("No model loaded — load a model before asking.", "warn");
-      return;
-    }
+    if (!this.chat) return;
     this.events.onStatus("generating");
     this.stopRequested = false;
     this.generating = true;
@@ -311,7 +311,8 @@ export class Engine {
       this.generating = false;
       this.events.onStatus("ready");
       // Report how many tokens the session now occupies, so the UI can
-      // track the conversation's context usage.
+      // track the conversation's context usage. Safe only after generation
+      // has wound down — mid-generation calls block the worker.
       if (this.chat) {
         try {
           const stats = await this.chat.getStats();
@@ -340,6 +341,14 @@ export class Engine {
   }
 
   async resetHistory(): Promise<void> {
+    if (this.chat && this.generating) {
+      // Resetting while generating hangs until the response completes: the
+      // Rust-side reset flushes the in-flight token generator, which drains
+      // it to completion (core/src/chat.rs flush()). Stop the generation
+      // first, so the flush only winds down an already-stopping generator.
+      this.chat.stopGeneration();
+      this.stopRequested = true;
+    }
     await this.chat?.resetHistory();
     this.events.onLog("Chat history reset.");
   }

@@ -188,8 +188,16 @@ export default function App() {
   // over the entire last generation once it finishes.
   const [liveTps, setLiveTps] = useState(0);
   const [lastRunTps, setLastRunTps] = useState(0);
+  // Tokens generated this run, and the timestamps of the first and latest
+  // token — the whole-run average uses these.
   const genTokensRef = useRef(0);
+  const firstTokenTimeRef = useRef(0);
+  const lastTokenTimeRef = useRef(0);
+  // Token timestamps inside the rolling window (live rate only).
   const tokenTimesRef = useRef<number[]>([]);
+  // When the live badge was last updated — it is throttled, since updating
+  // it per token re-renders the whole app per token.
+  const lastTpsUpdateRef = useRef(0);
   // A message queued while the model auto-loads; flushed on "ready".
   const pendingAskRef = useRef<{ text: string; conversationId: string } | null>(
     null,
@@ -353,7 +361,10 @@ export default function App() {
         if (s === "generating") {
           // Start a fresh tokens/second measurement for this generation.
           genTokensRef.current = 0;
+          firstTokenTimeRef.current = 0;
+          lastTokenTimeRef.current = 0;
           tokenTimesRef.current = [];
+          lastTpsUpdateRef.current = 0;
           setLiveTps(0);
         } else if (s === "idle") {
           setLiveTps(0);
@@ -392,15 +403,13 @@ export default function App() {
           // Apply any still-buffered tokens before the finalizer turns the
           // streaming placeholder into a persisted message.
           flushStreamBuffer();
-          // Final rate over the last generation, computed from the same
-          // rolling window the live badge uses — decode-only, since the
-          // window starts at the first token.
-          const times = tokenTimesRef.current;
-          if (times.length > 1) {
-            const span = (times[times.length - 1] - times[0]) / 1000;
-            if (span > 0) {
-              setLastRunTps(times.length / span);
-            }
+          // Final rate over the entire last generation — decode-only, since
+          // timing starts at the first token. N tokens span N-1 intervals.
+          const count = genTokensRef.current;
+          const span =
+            (lastTokenTimeRef.current - firstTokenTimeRef.current) / 1000;
+          if (count > 1 && span > 0) {
+            setLastRunTps((count - 1) / span);
           }
           setConversations((prev) =>
             prev.map((c) => ({
@@ -446,13 +455,22 @@ export default function App() {
         // Live tokens/second over a 3s rolling window (pure decode speed —
         // the window starts at the first token, so prompt processing and
         // first-token latency don't skew it).
-        genTokensRef.current += 1;
         const now = performance.now();
+        if (genTokensRef.current === 0) firstTokenTimeRef.current = now;
+        lastTokenTimeRef.current = now;
+        genTokensRef.current += 1;
         const times = tokenTimesRef.current;
         times.push(now);
-        while (times.length > 0 && now - times[0] > 3000) times.shift();
-        const span = Math.max((now - (times[0] ?? now)) / 1000, 0.5);
-        setLiveTps(times.length / span);
+        while (now - times[0] > 3000) times.shift();
+        // N timestamps span N-1 intervals. Throttle the state update to
+        // ~4/s — the badge doesn't need per-token precision.
+        if (times.length > 1 && now - lastTpsUpdateRef.current >= 250) {
+          const span = (now - times[0]) / 1000;
+          if (span > 0) {
+            lastTpsUpdateRef.current = now;
+            setLiveTps((times.length - 1) / span);
+          }
+        }
         // Buffer the token; the throttled flush applies it to state.
         streamBufRef.current += token;
         if (streamFlushRef.current === null) {

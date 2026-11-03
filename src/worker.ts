@@ -6,6 +6,7 @@
  * generating tokens.
  */
 
+import type { AgentCommand } from "./agent";
 import { Engine } from "./engine";
 
 const engine = new Engine({
@@ -18,21 +19,22 @@ const engine = new Engine({
   onModels: (models) => postMessage({ type: "models", payload: models }),
 });
 
-self.onmessage = async (event: MessageEvent) => {
-  const { command, payload } = event.data;
+// The command is the whole message payload — same shape the agent sends.
+self.onmessage = async (event: MessageEvent<AgentCommand>) => {
+  const command = event.data;
   try {
-    switch (command) {
+    switch (command.type) {
       case "list-models":
         await engine.listModels();
         break;
       case "download":
-        await engine.download(payload.url);
+        await engine.download(command.url);
         break;
       case "load":
-        await engine.load(payload);
+        await engine.load(command.options);
         break;
       case "ask":
-        await engine.ask(payload.text);
+        await engine.ask(command.text);
         break;
       case "stop":
         engine.stop();

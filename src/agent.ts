@@ -72,6 +72,14 @@ export async function createAgent(
     worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
       dispatch(events, event.data);
     };
+    // Surface worker-level failures (e.g. a crash while loading the WASM)
+    // instead of failing silently.
+    worker.onerror = (event) => {
+      events.onError(`Worker error: ${event.message ?? "unknown"}`);
+    };
+    worker.onmessageerror = () => {
+      events.onError("Worker message serialization failed.");
+    };
     return {
       send: (command) => worker.postMessage(command),
       dispose: () => worker.terminate(),

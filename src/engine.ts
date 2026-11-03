@@ -333,16 +333,7 @@ export class Engine {
     this.generating = true;
     try {
       const stream = await this.chat.ask(text);
-      // Debug: ms per token, one line per nextToken() call.
-      let last = 0;
-      let count = 0;
       for await (const token of stream) {
-        const now = performance.now();
-        count += 1;
-        if (last > 0) {
-          this.events.onLog(`engine decode: tok ${count} ${ (now - last).toFixed(1)}ms`, "info");
-        }
-        last = now;
         if (this.stopRequested) break;
         this.events.onToken(token);
         if (this.yieldBetweenTokens) {

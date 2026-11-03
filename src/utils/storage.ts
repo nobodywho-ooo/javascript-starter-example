@@ -14,7 +14,7 @@ export type ConversationSettings = {
   threadCount: number; // 0 = auto
   systemPrompt: string;
   /** Give the model a web-fetch tool. */
-  enableWebTools: boolean;
+  enableWebTools: boolean; // default on
 };
 
 export type Conversation = {
@@ -46,7 +46,7 @@ export const defaultSettings: Settings = {
     useGpu: false,
     threadCount: 0, // 0 = auto
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
-    enableWebTools: false,
+    enableWebTools: true,
   },
 };
 

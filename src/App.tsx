@@ -148,14 +148,24 @@ export default function App() {
           modelUrl: SUGGESTED_MODELS[0].url,
           useGpu: false,
           threadCount: 0, // 0 = auto
-          enableWebTools: false,
+          enableWebTools: true,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
         });
     if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
+    // Older stored settings predate the field — default it on.
+    base.enableWebTools ??= true;
     return base;
   });
   const setSettings = (patch: Partial<ConversationSettings>) => {
-    setSettingsState((prev) => ({ ...prev, ...patch }));
+    const next = { ...settings, ...patch };
+    setSettingsState(next);
+    // Options apply to the running session — if the change invalidates it,
+    // unload now; the model reloads automatically on the next message.
+    if (loadedKey !== null && settingsKey(next) !== loadedKey) {
+      setLoadedKey(null);
+      setLoadedModelUrl(null);
+      send({ type: "unload" });
+    }
   };
 
   // --- Engine state (global — one engine session) ---
@@ -792,7 +802,7 @@ export default function App() {
               checked={settings.useGpu}
               onChange={(e) => setSettings({ useGpu: e.target.checked })}
             />
-            Use WebGPU (requires model reload)
+            Use WebGPU
           </label>
           <label className="settings-check">
             <input
@@ -800,7 +810,7 @@ export default function App() {
               checked={settings.enableWebTools}
               onChange={(e) => setSettings({ enableWebTools: e.target.checked })}
             />
-            Web tools — fetch_url (requires model reload)
+            Web tools — fetch_url
           </label>
           <label className="settings-check">
             <input
@@ -854,17 +864,14 @@ export default function App() {
 
   // One merged status readout: download/load progress while busy, tokens
   // per second otherwise (live window while generating, last run when idle).
-  // Rendered both as tok/s and ms per token — they're reciprocals, but ms
-  // reads more directly when comparing per-token costs.
-  const tps = status === "generating" ? liveTps : lastRunTps;
   const statusLabel =
     status === "downloading"
       ? `downloading ${Math.round(progress * 100)}%`
       : status === "loading"
         ? "loading…"
-        : tps > 0
-          ? `${tps.toFixed(1)} tok/s · ${(1000 / tps).toFixed(1)} ms/tok`
-          : "0 tok/s";
+        : status === "generating"
+          ? `${liveTps.toFixed(1)} tok/s`
+          : `${lastRunTps.toFixed(1)} tok/s`;
 
   const isMetric =
     status === "idle" || status === "ready" || status === "generating";

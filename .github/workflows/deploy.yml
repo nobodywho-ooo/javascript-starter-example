@@ -28,7 +28,7 @@ jobs:
       # published to npm, remove this and all following TEMPORARY steps, and
       # change the dependency in package.json to a version.
       - name: Clone nobodywho package (temporary)
-        run: git clone --depth 1 --branch madsmtm/wasm https://github.com/nobodywho-ooo/nobodywho.git "$GITHUB_WORKSPACE/../nobodywho"
+        run: git clone --depth 1 --branch fetch https://github.com/nobodywho-ooo/nobodywho.git "$GITHUB_WORKSPACE/../nobodywho"
 
       # TEMPORARY: needed by `npm run prepack` below, which compiles the
       # nobodywho WASM module from source.

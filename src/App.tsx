@@ -900,7 +900,15 @@ export default function App() {
       {/* --- Conversations sidebar --- */}
       <aside className="conv-sidebar">
         <div className="conv-brand">
-          <Wordmark size={20} />
+          <Wordmark size={20} href="https://nobodywho.ai" />
+          <a
+            className="brand-source"
+            href="https://github.com/nobodywho-ooo/javascript-starter-example"
+            target="_blank"
+            rel="noopener"
+          >
+            Source
+          </a>
         </div>
         <div className="conv-list">
           {visibleConversations.map((c) => {

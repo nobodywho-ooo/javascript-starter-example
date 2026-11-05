@@ -177,11 +177,32 @@
 /* --- Sidebar brand --- */
 .conv-brand {
   flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   padding: 18px 20px 0;
 }
 
 .conv-brand .nw-logo {
   color: var(--sec-ink);
+}
+
+/* "Source" link next to the wordmark in the sidebar brand row */
+.brand-source {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--sec-accent, var(--accent));
+}
+
+.brand-source:hover,
+.brand-source:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* --- Sidebar footer: tok/s box above status + settings --- */

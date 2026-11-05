@@ -456,24 +456,6 @@
   scrollbar-color: var(--sec-rule) transparent;
 }
 
-.empty-state {
-  max-width: 34ch;
-  padding-top: clamp(48px, 10vh, 140px);
-}
-
-.empty-state .nw-eyebrow {
-  margin-bottom: 22px;
-}
-
-.empty-state p {
-  margin: 0;
-  font-weight: 600;
-  font-size: var(--type-lead);
-  line-height: 1.18;
-  letter-spacing: var(--tr-tight);
-  color: var(--sec-muted);
-  text-wrap: balance;
-}
 
 /* Messages — user bubbles right, everything else left; no labels */
 .msg {

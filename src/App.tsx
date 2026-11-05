@@ -982,12 +982,6 @@ export default function App() {
 
         <main className="chat-area">
           <div className="messages" ref={messagesRef}>
-            {active.messages.length === 0 && (
-              <div className="empty-state">
-                <Eyebrow>NobodyWho web chat</Eyebrow>
-                <p>Type a message to get started.</p>
-              </div>
-            )}
             {active.messages.map((m) => (
               <div key={m.id} className={`msg msg-${m.role}`}>
                 <div className="bubble">{m.content || "…"}</div>

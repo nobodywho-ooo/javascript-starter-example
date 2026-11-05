@@ -3,9 +3,6 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
-  // GitHub Pages serves this at /<repo-name>/; locally and for other hosts
-  // the default '/' is correct. Override via VITE_BASE when needed.
-  base: process.env.VITE_BASE ?? '/',
   // NobodyWho's WASM glue uses top-level await, which is only supported in
   // ES module output — not the classic IIFE format Vite defaults to for workers.
   worker: {

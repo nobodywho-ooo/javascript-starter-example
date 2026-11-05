@@ -74,7 +74,8 @@ export interface EngineEvents {
   onModels(models: CachedModel[]): void;
 }
 
-export type LoadOptions = {  url: string;
+export type LoadOptions = {
+  url: string;
   useGpu: boolean;
   systemPrompt: string;
   /** Thinking-mode toggle for chat templates that support it
@@ -184,9 +185,7 @@ export class Engine {
           modelPath: url,
           onDownloadProgress: (downloaded, total) => {
             if (handle.cancelled) return;
-            handle.report?.(
-              total > 0 ? Number(downloaded) / Number(total) : 0,
-            );
+            handle.report?.(total > 0 ? Number(downloaded) / Number(total) : 0);
           },
         });
         if (handle.cancelled) {

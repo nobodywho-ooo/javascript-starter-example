@@ -18,7 +18,8 @@ const engine = new Engine({
     postMessage({ type: "log", payload: { message, level } }),
   onStatus: (status, message) =>
     postMessage({ type: "status", payload: { status, message } }),
-  onProgress: (fraction) => postMessage({ type: "progress", payload: fraction }),
+  onProgress: (fraction) =>
+    postMessage({ type: "progress", payload: fraction }),
   onToken: (token) => postMessage({ type: "token", payload: token }),
   onTokens: (count) => postMessage({ type: "tokens", payload: count }),
   onError: (message) => postMessage({ type: "error", payload: message }),

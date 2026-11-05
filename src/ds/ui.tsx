@@ -25,7 +25,13 @@ export function Wordmark({
   const style = { fontSize: size, color: color || "inherit" };
   const cls = "nw-logo " + className;
   return href ? (
-    <a className={cls} href={href} style={style} aria-label="NobodyWho, front page" {...rest}>
+    <a
+      className={cls}
+      href={href}
+      style={style}
+      aria-label="NobodyWho, front page"
+      {...rest}
+    >
       nobodywho
     </a>
   ) : (
@@ -50,7 +56,11 @@ export function Button({
   className = "",
   ...rest
 }: ButtonProps) {
-  const cls = ["nw-btn", variant === "solid" ? "nw-btn--solid" : "nw-btn--flat", className]
+  const cls = [
+    "nw-btn",
+    variant === "solid" ? "nw-btn--solid" : "nw-btn--flat",
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
   if (href) {
@@ -59,7 +69,9 @@ export function Button({
       <a
         className={cls}
         href={href}
-        onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
+        onClick={
+          onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>
+        }
         target={ext ? "_blank" : undefined}
         rel={ext ? "noopener" : undefined}
       >

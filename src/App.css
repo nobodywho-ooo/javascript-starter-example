@@ -160,7 +160,9 @@
   color: var(--sec-muted);
   cursor: pointer;
   opacity: 0;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .conv-item:hover .conv-del,

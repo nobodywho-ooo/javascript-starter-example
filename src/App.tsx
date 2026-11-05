@@ -118,7 +118,12 @@ function isEmptyConversation(c: Conversation): boolean {
 
 /** Identity of the model configuration an engine session is running. */
 function settingsKey(s: ConversationSettings): string {
-  return JSON.stringify([s.modelUrl, s.useGpu, s.systemPrompt, s.enableThinking]);
+  return JSON.stringify([
+    s.modelUrl,
+    s.useGpu,
+    s.systemPrompt,
+    s.enableThinking,
+  ]);
 }
 
 export default function App() {
@@ -577,8 +582,7 @@ export default function App() {
 
   const deleteConversation = (id: string) => {
     const next = conversations.filter((c) => c.id !== id);
-    const result =
-      next.length > 0 ? next : [makeConversation()];
+    const result = next.length > 0 ? next : [makeConversation()];
     setConversations(result);
     if (id === active.id) {
       const fallback = result[0];
@@ -662,7 +666,7 @@ export default function App() {
         options: {
           url: settings.modelUrl,
           useGpu: settings.useGpu,
-            systemPrompt: settings.systemPrompt,
+          systemPrompt: settings.systemPrompt,
         },
       });
       pendingLoadUrlRef.current = settings.modelUrl;
@@ -813,7 +817,9 @@ export default function App() {
             <input
               type="checkbox"
               checked={settings.enableThinking}
-              onChange={(e) => setSettings({ enableThinking: e.target.checked })}
+              onChange={(e) =>
+                setSettings({ enableThinking: e.target.checked })
+              }
             />
             Enable thinking
           </label>
@@ -885,34 +891,35 @@ export default function App() {
           {visibleConversations.map((c) => {
             // A brand-new conversation has no title yet — show it without
             // one until the user has written something.
-            const untitled = c.messages.length === 0 && c.title === "New conversation";
+            const untitled =
+              c.messages.length === 0 && c.title === "New conversation";
             return (
-            <div
-              key={c.id}
-              role="button"
-              tabIndex={0}
-              className={`conv-item${c.id === active.id ? " is-active" : ""}`}
-              onClick={() => switchConversation(c.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  switchConversation(c.id);
-                }
-              }}
-            >
-              {!untitled && <span className="t">{c.title}</span>}
-              <span className="meta">{c.tokens ?? 0} tokens</span>
-              <button
-                className="conv-del"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteConversation(c.id);
+              <div
+                key={c.id}
+                role="button"
+                tabIndex={0}
+                className={`conv-item${c.id === active.id ? " is-active" : ""}`}
+                onClick={() => switchConversation(c.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    switchConversation(c.id);
+                  }
                 }}
-                title="Delete conversation"
               >
-                Delete
-              </button>
-            </div>
+                {!untitled && <span className="t">{c.title}</span>}
+                <span className="meta">{c.tokens ?? 0} tokens</span>
+                <button
+                  className="conv-del"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteConversation(c.id);
+                  }}
+                  title="Delete conversation"
+                >
+                  Delete
+                </button>
+              </div>
             );
           })}
           <div

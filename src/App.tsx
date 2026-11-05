@@ -140,6 +140,33 @@ export default function App() {
   const active =
     conversations.find((c) => c.id === activeId) ?? conversations[0];
 
+  // The agent holds event callbacks that outlive renders, so keep the active
+  // conversation id in a ref for use inside those callbacks. Updated through
+  // `changeActiveId` so the ref can never drift from the state.
+  const activeIdRef = useRef(active.id);
+  const changeActiveId = (id: string) => {
+    activeIdRef.current = id;
+    setActiveId(id);
+  };
+
+  // The engine handle and a stable `send`. Declared early so callbacks and
+  // effects below can use them without ordering hazards.
+  const agentRef = useRef<Agent | null>(null);
+  // Set when the agent-lifecycle effect's cleanup runs, cleared when it
+  // starts — see the effect body for why.
+  const disposedRef = useRef(false);
+  const send = useCallback((command: AgentCommand) => {
+    agentRef.current?.send(command);
+  }, []);
+
+  const updateConversation = (id: string, patch: Partial<Conversation>) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c,
+      ),
+    );
+  };
+
   // Model/engine settings are global — shared by every conversation.
   const [settings, setSettingsState] = useState<ConversationSettings>(() => {
     const stored = loadSettings().model;
@@ -237,13 +264,6 @@ export default function App() {
     () => loadSettings().useWorkerThread,
   );
 
-  // The agent holds event callbacks that outlive renders, so keep refs to
-  // the active conversation id and the conversation list for use inside
-  // those callbacks.
-  const activeIdRef = useRef(active.id);
-  useEffect(() => {
-    activeIdRef.current = active.id;
-  }, [active.id]);
   const conversationsRef = useRef(conversations);
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -312,11 +332,8 @@ export default function App() {
   }, [conversations]);
 
   useEffect(() => {
-    if (active.id !== activeId) {
-      setActiveId(active.id);
-    }
     saveActiveConversationId(active.id);
-  }, [active.id, activeId]);
+  }, [active.id]);
 
   useEffect(() => {
     saveSettings({ useWorkerThread: useWorker, model: settings });
@@ -334,13 +351,17 @@ export default function App() {
   );
 
   // --- Agent lifecycle ---
-  const agentRef = useRef<Agent | null>(null);
-
   useEffect(() => {
-    let disposed = false;
+    // Tracks whether this effect's cleanup already ran — the agent promise
+    // may resolve after teardown (StrictMode remount, worker toggle), in
+    // which case the freshly created agent must be disposed immediately.
+    // A ref is used instead of a closure variable because effect runs are
+    // serialized (cleanup always precedes the next run).
+    disposedRef.current = false;
     // A fresh engine has no model — never inherit status/loading state from
     // a previous agent instance (StrictMode remount, HMR, worker toggle),
     // or a send could race past the auto-load path.
+    // oxlint-disable-next-line react/set-state-in-effect
     setStatus("idle");
     setLoadedKey(null);
     setLoadedModelUrl(null);
@@ -497,7 +518,7 @@ export default function App() {
       },
       onModels: setModels,
     }).then((agent) => {
-      if (disposed) {
+      if (disposedRef.current) {
         agent.dispose?.();
         return;
       }
@@ -505,7 +526,7 @@ export default function App() {
       agent.send({ type: "list-models" });
     });
     return () => {
-      disposed = true;
+      disposedRef.current = true;
       if (streamFlushRef.current !== null) {
         clearTimeout(streamFlushRef.current);
         streamFlushRef.current = null;
@@ -513,11 +534,7 @@ export default function App() {
       agentRef.current?.dispose?.();
       agentRef.current = null;
     };
-  }, [useWorker, log]);
-
-  const send = useCallback((command: AgentCommand) => {
-    agentRef.current?.send(command);
-  }, []);
+  }, [useWorker, log, flushStreamBuffer, send]);
 
   // --- Settings popover behaviour: close on outside click or Escape ---
   useEffect(() => {
@@ -545,17 +562,9 @@ export default function App() {
 
   // --- Conversation helpers ---
 
-  const updateConversation = (id: string, patch: Partial<Conversation>) => {
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c,
-      ),
-    );
-  };
-
   const switchConversation = (id: string) => {
     if (id === active.id) return;
-    setActiveId(id);
+    changeActiveId(id);
     setInput("");
     // Load the target conversation's history into the engine session.
     send({ type: "set-history", messages: historyFor(id) });
@@ -575,7 +584,7 @@ export default function App() {
     }
     const conv = makeConversation();
     setConversations((prev) => [conv, ...prev]);
-    setActiveId(conv.id);
+    changeActiveId(conv.id);
     setInput("");
     send({ type: "reset" });
   };
@@ -586,7 +595,7 @@ export default function App() {
     setConversations(result);
     if (id === active.id) {
       const fallback = result[0];
-      setActiveId(fallback.id);
+      changeActiveId(fallback.id);
       send({ type: "reset" });
     }
   };

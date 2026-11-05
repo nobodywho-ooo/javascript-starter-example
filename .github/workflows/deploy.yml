@@ -33,10 +33,11 @@ jobs:
       # TEMPORARY: needed by `npm run prepack` below, which compiles the
       # nobodywho WASM module from source.
       - name: Install Emscripten SDK (temporary)
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 6.0.13
-          actions-cache-folder: emsdk
+        run: |
+          EMSCRIPTEN_VERSION="6.0.13"
+          git clone https://github.com/emscripten-core/emsdk.git --branch ${EMSCRIPTEN_VERSION}
+          ./emsdk/emsdk install ${EMSCRIPTEN_VERSION}
+          ./emsdk/emsdk activate ${EMSCRIPTEN_VERSION}
 
       - uses: actions/setup-node@v4
         with:

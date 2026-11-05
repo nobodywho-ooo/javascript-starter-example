@@ -28,10 +28,7 @@ jobs:
       # published to npm, remove this and all following TEMPORARY steps, and
       # change the dependency in package.json to a version.
       - name: Clone nobodywho package (temporary)
-        run: >-
-          git clone --depth 1 --branch madsmtm/wasm
-          https://github.com/nobodywho-ooo/nobodywho.git
-          "$GITHUB_WORKSPACE/../nobodywho"
+        run: git clone --depth 1 --branch madsmtm/wasm https://github.com/nobodywho-ooo/nobodywho.git "$GITHUB_WORKSPACE/../nobodywho"
 
       # TEMPORARY: needed by `npm run prepack` below, which compiles the
       # nobodywho WASM module from source.
@@ -56,12 +53,12 @@ jobs:
       - name: Cache cargo build (temporary)
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "$GITHUB_WORKSPACE/../nobodywho/nobodywho"
+          workspaces: ../nobodywho/nobodywho
 
       # TEMPORARY: build the package from source so its `dist/` (and the
       # bundled WASM) are up to date.
       - name: Build nobodywho js package (temporary)
-        working-directory: "$GITHUB_WORKSPACE/../nobodywho/nobodywho/js"
+        working-directory: ../nobodywho/nobodywho/js
         run: |
           npm ci --no-audit --no-fund
           npm run prepack

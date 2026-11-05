@@ -286,16 +286,18 @@
 }
 
 /* --- Settings popover --- */
-/* A floating popover, sized to 80% of the viewport and centered. position:
-   fixed escapes the sidebar; the transform centering is accounted for in
-   the pop-in keyframes so the animation doesn't cancel it out. */
+/* A floating popover, centered and sized to fit its content — children are
+   capped at 720px, so the popover stops there too instead of stretching
+   across the viewport. position: fixed escapes the sidebar; the transform
+   centering is accounted for in the pop-in keyframes so the animation
+   doesn't cancel it out. */
 .settings-popover {
   position: fixed;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 30;
-  width: 80vw;
+  width: min(80vw, 770px);
   height: 80dvh;
   overflow-y: auto;
   display: flex;

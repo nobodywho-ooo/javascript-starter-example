@@ -140,7 +140,7 @@ export default function App() {
     const stored = loadSettings().model;
     const base = {
       ...stored,
-      modelUrl: stored.modelUrl || SUGGESTED_MODELS[0].url,
+      modelUrl: stored.modelUrl || SUGGESTED_MODELS[3].url,
     };
     // Older stored settings predate the field — default it on.
     base.enableThinking ??= true;

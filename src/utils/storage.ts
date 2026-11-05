@@ -14,6 +14,9 @@ export type ConversationSettings = {
   systemPrompt: string;
   /** Thinking mode for templates that support it (Qwen3-style). */
   enableThinking: boolean;
+  /** Inference thread count (llama.cpp `n_threads`). Omitted = let the
+   * engine pick (physical cores, no hyperthreads). */
+  nThreads?: number;
 };
 
 export type Conversation = {

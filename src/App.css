@@ -412,6 +412,28 @@
   outline-offset: 4px;
 }
 
+/* Grayed out — disabled options stay visible but clearly unavailable */
+.settings-check:has(input:disabled) {
+  color: var(--sec-muted);
+  cursor: not-allowed;
+}
+
+.settings-check input:disabled {
+  cursor: not-allowed;
+  border-color: var(--sec-dot);
+}
+
+.settings-check input:disabled:checked {
+  background: var(--sec-dot);
+  border-color: var(--sec-dot);
+}
+
+.nw-field input:disabled {
+  cursor: not-allowed;
+  color: var(--sec-muted);
+  border-color: var(--sec-dot);
+}
+
 /* Cached models — hairline fact rows, mono data */
 .cached-models {
   display: flex;

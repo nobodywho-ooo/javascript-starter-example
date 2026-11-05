@@ -81,6 +81,9 @@ export type LoadOptions = {
   /** Thinking-mode toggle for chat templates that support it
    * (Qwen3-style `enable_thinking`). Omitted = template default. */
   enableThinking?: boolean;
+  /** Inference thread count (llama.cpp `n_threads`). Omitted =
+   * auto-detect the device's physical core count. */
+  nThreads?: number;
 };
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string };
@@ -263,6 +266,8 @@ export class Engine {
       this.chat = new Chat({
         model: this.model,
         systemPrompt: opts.systemPrompt,
+        // Inference thread count — omitted, the engine picks physical cores.
+        threadCount: opts.nThreads,
         // The constructor replaces the template variables wholesale, so only
         // pass them when the user has actually expressed a preference.
         templateVariables:

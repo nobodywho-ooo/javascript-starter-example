@@ -123,6 +123,7 @@ function settingsKey(s: ConversationSettings): string {
     s.useGpu,
     s.systemPrompt,
     s.enableThinking,
+    s.nThreads,
   ]);
 }
 
@@ -629,6 +630,7 @@ export default function App() {
         useGpu: settings.useGpu,
         systemPrompt: settings.systemPrompt,
         enableThinking: settings.enableThinking,
+        nThreads: settings.nThreads,
       },
     });
   };
@@ -682,6 +684,7 @@ export default function App() {
           url: settings.modelUrl,
           useGpu: settings.useGpu,
           systemPrompt: settings.systemPrompt,
+          nThreads: settings.nThreads,
         },
       });
       pendingLoadUrlRef.current = settings.modelUrl;
@@ -820,10 +823,11 @@ export default function App() {
       <div className="settings-group">
         <Eyebrow>Inference</Eyebrow>
         <div className="settings-grid">
-          <label className="settings-check">
+          <label className="settings-check" title="WebGPU is disabled in this build">
             <input
               type="checkbox"
               checked={settings.useGpu}
+              disabled
               onChange={(e) => setSettings({ useGpu: e.target.checked })}
             />
             Use WebGPU
@@ -838,6 +842,24 @@ export default function App() {
             />
             Enable thinking
           </label>
+          <div className="nw-field" title="Coming soon">
+            <label htmlFor="n-threads">Threads</label>
+            <input
+              id="n-threads"
+              type="number"
+              min={1}
+              placeholder="Auto"
+              value={settings.nThreads ?? ""}
+              disabled
+              onChange={(e) => {
+                const v = e.target.value;
+                setSettings({
+                  nThreads:
+                    v === "" ? undefined : Math.max(1, Math.floor(Number(v))),
+                });
+              }}
+            />
+          </div>
           <label className="settings-check">
             <input
               type="checkbox"

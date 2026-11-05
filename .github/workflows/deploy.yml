@@ -1,0 +1,79 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TEMPORARY: the app depends on `react-native-nobodywho` via
+      # `file:../nobodywho/nobodywho/js`, so we check out the package source
+      # as a sibling directory. Once the package is published to npm, remove
+      # this step and all following TEMPORARY steps, and change the dependency
+      # in package.json to a version.
+      - name: Checkout nobodywho package (temporary)
+        uses: actions/checkout@v4
+        with:
+          repository: nobodywho-ooo/nobodywho
+          ref: madsmtm/wasm
+          path: nobodywho
+
+      # TEMPORARY: needed by `npm run prepack` below, which compiles the
+      # nobodywho WASM module from source.
+      - name: Install Emscripten SDK (temporary)
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # TEMPORARY: needed by `npm run prepack` below.
+      - name: Install Rust toolchain (temporary)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      # TEMPORARY: the WASM build (llama.cpp + rust) takes a long time from
+      # cold; cache the cargo target dir between runs.
+      - name: Cache cargo build (temporary)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: nobodywho/nobodywho
+
+      # TEMPORARY: build the package from source so its `dist/` (and the
+      # bundled WASM) are up to date.
+      - name: Build nobodywho js package (temporary)
+        working-directory: nobodywho/nobodywho/js
+        run: |
+          npm ci --no-audit --no-fund
+          npm run prepack
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          # Project site: served at /javascript-starter-example/
+          VITE_BASE: /javascript-starter-example/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - uses: actions/deploy-pages@v4

@@ -35,9 +35,10 @@ jobs:
       - name: Install Emscripten SDK (temporary)
         run: |
           EMSCRIPTEN_VERSION="6.0.13"
-          git clone https://github.com/emscripten-core/emsdk.git --branch ${EMSCRIPTEN_VERSION}
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git --branch ${EMSCRIPTEN_VERSION}
           ./emsdk/emsdk install ${EMSCRIPTEN_VERSION}
           ./emsdk/emsdk activate ${EMSCRIPTEN_VERSION}
+          echo "$(pwd)/emsdk/upstream/emscripten" >> "${GITHUB_PATH}"
 
       - uses: actions/setup-node@v4
         with:

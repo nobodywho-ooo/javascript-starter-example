@@ -58,35 +58,6 @@ function isConversation(value: unknown): value is Conversation {
   );
 }
 
-/**
- * One-time migration: model settings used to live per conversation. Returns
- * the newest stored conversation's settings, or null if there are none.
- */
-export function loadLegacyModelSettings(): ConversationSettings | null {
-  try {
-    const data = localStorage.getItem(CONVERSATIONS_KEY);
-    if (!data) return null;
-    const parsed: unknown = JSON.parse(data);
-    if (!Array.isArray(parsed)) return null;
-    const withSettings = parsed
-      .filter(
-        (c): c is { updatedAt: number; settings: ConversationSettings } =>
-          typeof c === "object" &&
-          c !== null &&
-          typeof (c as Record<string, unknown>).updatedAt === "number" &&
-          typeof (
-            (c as Record<string, unknown>).settings as
-              | Record<string, unknown>
-              | undefined
-          )?.modelUrl === "string",
-      )
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-    return withSettings[0]?.settings ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function loadConversations(): Conversation[] {
   try {
     const data = localStorage.getItem(CONVERSATIONS_KEY);

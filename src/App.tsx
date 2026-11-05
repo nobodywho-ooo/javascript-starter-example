@@ -5,10 +5,8 @@ import { Button, Eyebrow, Wordmark } from "./ds/ui";
 import { createAgent, type Agent, type AgentCommand } from "./agent";
 import type { CachedModel, EngineStatus, HistoryMessage } from "./engine";
 import {
-  DEFAULT_SYSTEM_PROMPT,
   loadActiveConversationId,
   loadConversations,
-  loadLegacyModelSettings,
   loadSettings,
   saveActiveConversationId,
   saveConversations,
@@ -140,17 +138,10 @@ export default function App() {
   // Model/engine settings are global — shared by every conversation.
   const [settings, setSettingsState] = useState<ConversationSettings>(() => {
     const stored = loadSettings().model;
-    // Migration: model settings used to be stored per conversation.
-    const legacy = stored.modelUrl ? null : loadLegacyModelSettings();
-    const base = stored.modelUrl
-      ? stored
-      : (legacy ?? {
-          modelUrl: SUGGESTED_MODELS[0].url,
-          useGpu: false,
-          enableThinking: true,
-          systemPrompt: DEFAULT_SYSTEM_PROMPT,
-        });
-    if (!base.modelUrl) base.modelUrl = SUGGESTED_MODELS[0].url;
+    const base = {
+      ...stored,
+      modelUrl: stored.modelUrl || SUGGESTED_MODELS[0].url,
+    };
     // Older stored settings predate the field — default it on.
     base.enableThinking ??= true;
     return base;

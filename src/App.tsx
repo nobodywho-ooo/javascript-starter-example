@@ -301,6 +301,12 @@ export default function App() {
   // Refs for scrolling the chat log.
   const messagesRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Keep the chat input focused by default — and refocus when the active
+  // conversation changes (new chat, switch, etc.).
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [active.id]);
   const statusRef = useRef(status);
   useEffect(() => {
     statusRef.current = status;
@@ -992,6 +998,7 @@ export default function App() {
 
           <div className="input-area">
             <input
+              ref={inputRef}
               className="chat-input"
               type="text"
               placeholder="Type a message"

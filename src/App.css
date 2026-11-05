@@ -499,7 +499,6 @@
   scrollbar-color: var(--sec-rule) transparent;
 }
 
-
 /* Messages — user bubbles right, everything else left; no labels */
 .msg {
   display: flex;

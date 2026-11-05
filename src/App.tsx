@@ -3,7 +3,12 @@ import "./App.css";
 import "./ds/styles.css";
 import { Button, Eyebrow, Wordmark } from "./ds/ui";
 import { createAgent, type Agent, type AgentCommand } from "./agent";
-import type { CachedModel, EngineStatus, HistoryMessage } from "./engine";
+import type {
+  CachedModel,
+  EngineStatus,
+  HistoryMessage,
+  LoadOptions,
+} from "./engine";
 import {
   loadActiveConversationId,
   loadConversations,
@@ -116,15 +121,32 @@ function isEmptyConversation(c: Conversation): boolean {
   return c.messages.length === 0 && c.title === "New conversation";
 }
 
+/** Map the app's settings onto the engine's LoadOptions — the single place
+ * where that mapping lives. Both load call sites build their options with
+ * this, and settingsKey is derived from it, so a field can't be applied in
+ * one path but not the other (or counted by the key but not actually sent).
+ * When adding a ConversationSettings field, wire it in here; omitted fields
+ * (nThreads, enableThinking) mean "engine/template default". */
+function loadOptions(s: ConversationSettings): LoadOptions {
+  return {
+    url: s.modelUrl,
+    useGpu: s.useGpu,
+    systemPrompt: s.systemPrompt,
+    enableThinking: s.enableThinking,
+    nThreads: s.nThreads,
+  };
+}
+
+// Compile-time guard attempt removed: LoadOptions renames modelUrl → url,
+// so a keyof-level check can't hold. The guard against drift is structural:
+// there is exactly one place (loadOptions above) where settings become load
+// options, and both call sites plus settingsKey use it.
+
 /** Identity of the model configuration an engine session is running. */
 function settingsKey(s: ConversationSettings): string {
-  return JSON.stringify([
-    s.modelUrl,
-    s.useGpu,
-    s.systemPrompt,
-    s.enableThinking,
-    s.nThreads,
-  ]);
+  // Derived from loadOptions so the key always describes exactly what gets
+  // sent to the engine on load.
+  return JSON.stringify(loadOptions(s));
 }
 
 export default function App() {
@@ -625,13 +647,7 @@ export default function App() {
     setLoadingModelUrl(url);
     send({
       type: "load",
-      options: {
-        url,
-        useGpu: settings.useGpu,
-        systemPrompt: settings.systemPrompt,
-        enableThinking: settings.enableThinking,
-        nThreads: settings.nThreads,
-      },
+      options: loadOptions({ ...settings, modelUrl: url }),
     });
   };
 
@@ -678,15 +694,7 @@ export default function App() {
     // current settings), load first and send the message once ready.
     if (status === "idle" || (status === "ready" && modelMismatch)) {
       queueUserMessage(text);
-      send({
-        type: "load",
-        options: {
-          url: settings.modelUrl,
-          useGpu: settings.useGpu,
-          systemPrompt: settings.systemPrompt,
-          nThreads: settings.nThreads,
-        },
-      });
+      send({ type: "load", options: loadOptions(settings) });
       pendingLoadUrlRef.current = settings.modelUrl;
       pendingLoadKeyRef.current = settingsKey(settings);
       setLoadingModelUrl(settings.modelUrl);
@@ -823,7 +831,10 @@ export default function App() {
       <div className="settings-group">
         <Eyebrow>Inference</Eyebrow>
         <div className="settings-grid">
-          <label className="settings-check" title="WebGPU is disabled in this build">
+          <label
+            className="settings-check"
+            title="WebGPU is disabled in this build"
+          >
             <input
               type="checkbox"
               checked={settings.useGpu}
